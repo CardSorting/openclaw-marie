@@ -11,6 +11,11 @@ export type ResolvedMemorySearchConfig = {
   sources: Array<"memory" | "sessions">;
   extraPaths: string[];
   provider: "openai" | "local" | "gemini" | "voyage" | "mistral" | "ollama" | "auto";
+  privacyMode: boolean;
+  overflow: {
+    enabled: boolean;
+    activationThreshold: number;
+  };
   remote?: {
     baseUrl?: string;
     apiKey?: SecretInput;
@@ -141,6 +146,11 @@ function mergeConfig(
   const sessionMemory =
     overrides?.experimental?.sessionMemory ?? defaults?.experimental?.sessionMemory ?? false;
   const provider = overrides?.provider ?? defaults?.provider ?? "auto";
+  const privacyMode = overrides?.privacyMode ?? defaults?.privacyMode ?? false;
+  const overflow = {
+    enabled: overrides?.overflow?.enabled ?? defaults?.overflow?.enabled ?? true,
+    activationThreshold: overrides?.overflow?.activationThreshold ?? defaults?.overflow?.activationThreshold ?? 0.7,
+  };
   const defaultRemote = defaults?.remote;
   const overrideRemote = overrides?.remote;
   const hasRemoteConfig = Boolean(
@@ -306,6 +316,8 @@ function mergeConfig(
     sources,
     extraPaths,
     provider,
+    privacyMode,
+    overflow,
     remote,
     experimental: {
       sessionMemory,

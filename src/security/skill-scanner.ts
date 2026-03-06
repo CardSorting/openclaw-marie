@@ -170,7 +170,27 @@ const LINE_RULES: LineRule[] = [
     message: "WebSocket connection to non-standard port",
     pattern: /new\s+WebSocket\s*\(\s*["']wss?:\/\/[^"']*:(\d+)/,
   },
+  {
+    ruleId: "unsigned-patch",
+    severity: "critical",
+    message: "Skill mutation detected without valid cryptographic signature",
+    pattern: /marie_skill_patch\(.*?(?!signature:).*?\)/,
+  },
+  {
+    ruleId: "trust-elevation-bypass",
+    severity: "critical",
+    message: "Attempt to bypass skill quarantine pipeline detected",
+    pattern: /elevateSkillTrust\(.*?\)|skipQuarantine: true/,
+  },
 ];
+
+/**
+ * Verify a skill patch signature against the provided content.
+ */
+export function verifyPatchSignature(content: string, signature: string): boolean {
+  // Placeholder: verification logic using trusted public key
+  return signature.length > 0;
+}
 
 const STANDARD_PORTS = new Set([80, 443, 8080, 8443, 3000]);
 

@@ -8,6 +8,7 @@ import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import type { EmbeddedSandboxInfo } from "./pi-embedded-runner/types.js";
 import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
 import { buildAuditSummary as _buildJoyZoningAudit } from "./joy-zoning.policy.js";
+import type { ProvenanceRecord } from "./trust-provenance.js";
 
 function buildJoyZoningAuditSummary(sessionKey?: string): string {
   return _buildJoyZoningAudit(sessionKey);
@@ -43,6 +44,10 @@ function buildMemorySection(params: {
   isMinimal: boolean;
   availableTools: Set<string>;
   citationsMode?: MemoryCitationsMode;
+  memoryState?: {
+    memory: string;
+    userModel: string;
+  };
 }) {
   if (params.isMinimal) {
     return [];
@@ -54,6 +59,22 @@ function buildMemorySection(params: {
     "## Memory Recall",
     "Before answering anything about prior work, decisions, dates, people, preferences, or todos: run memory_search on MEMORY.md + memory/*.md; then use memory_get to pull only the needed lines. If low confidence after search, say you checked.",
   ];
+
+  if (params.memoryState) {
+    lines.push(
+      "",
+      "### Bounded Memory (MEMORY.md)",
+      "```",
+      params.memoryState.memory || "(empty)",
+      "```",
+      "",
+      "### User Behavioral Model (USER.md)",
+      "```",
+      params.memoryState.userModel || "(empty)",
+      "```",
+    );
+  }
+
   if (params.citationsMode === "off") {
     lines.push(
       "Citations are disabled: do not mention file paths or line numbers in replies unless the user explicitly asks.",
@@ -228,6 +249,7 @@ export function buildAgentSystemPrompt(params: {
     channel?: string;
     capabilities?: string[];
     repoRoot?: string;
+    lastSnapshotTs?: string | null;
   };
   messageToolHints?: string[];
   sandboxInfo?: EmbeddedSandboxInfo;
@@ -238,6 +260,14 @@ export function buildAgentSystemPrompt(params: {
   };
   memoryCitationsMode?: MemoryCitationsMode;
   sessionKey?: string;
+  memoryState?: {
+    memory: string;
+    userModel: string;
+    lastSnapshotTs: string | null;
+  };
+  nudgeDue?: boolean;
+  debugMode?: boolean;
+  provenance?: ProvenanceRecord;
 }) {
   const acpEnabled = params.acpEnabled !== false;
   const sandboxedRuntime = params.sandboxInfo?.enabled === true;
@@ -411,6 +441,7 @@ export function buildAgentSystemPrompt(params: {
     isMinimal,
     availableTools,
     citationsMode: params.memoryCitationsMode,
+    memoryState: params.memoryState,
   });
   const docsSection = buildDocsSection({
     docsPath: params.docsPath,
@@ -680,6 +711,15 @@ export function buildAgentSystemPrompt(params: {
     );
   }
 
+  if (params.nudgeDue) {
+    lines.push(
+      "## 🧠 Memory Nudge",
+      "Your bounded memory is approaching capacity or a review is due.",
+      "Please use `marie_memory_update` to prune low-signal entries and consolidate facts.",
+      "",
+    );
+  }
+
   // ── Joy-Zoning architectural context ──────────────────────────────────
   if (!isMinimal) {
     try {
@@ -690,6 +730,14 @@ export function buildAgentSystemPrompt(params: {
     } catch {
       // Joy-Zoning is advisory; never break prompt construction.
     }
+  }
+
+  if (params.debugMode && params.provenance) {
+    lines.push(
+      "## 🕵️ Debug: Trust Provenance",
+      `Provenance: ${JSON.stringify(params.provenance)}`,
+      "",
+    );
   }
 
   lines.push(
@@ -712,11 +760,13 @@ export function buildRuntimeLine(
     defaultModel?: string;
     shell?: string;
     repoRoot?: string;
+    lastSnapshotTs?: string | null;
   },
   runtimeChannel?: string,
   runtimeCapabilities: string[] = [],
   defaultThinkLevel?: ThinkLevel,
 ): string {
+  const lastSnapshot = runtimeInfo?.lastSnapshotTs ? ` | last_snapshot=${runtimeInfo.lastSnapshotTs}` : "";
   return `Runtime: ${[
     runtimeInfo?.agentId ? `agent=${runtimeInfo.agentId}` : "",
     runtimeInfo?.host ? `host=${runtimeInfo.host}` : "",
@@ -737,5 +787,5 @@ export function buildRuntimeLine(
     `thinking=${defaultThinkLevel ?? "off"}`,
   ]
     .filter(Boolean)
-    .join(" | ")}`;
+    .join(" | ")}${lastSnapshot}`;
 }
