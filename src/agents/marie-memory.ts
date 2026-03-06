@@ -119,7 +119,18 @@ export async function readMemoryState(agentDir: string): Promise<MarieMemoryStat
   return { memory, userModel, lastSnapshotTs };
 }
 
+import { logStrategicMetric } from "../logging/diagnostic.js";
 import { validateMemoryWrite } from "../security/memory-write-gate.js";
+
+function calculateDiscovery(oldContent: string, newContent: string): number {
+  const oldLines = new Set(oldContent.split("\n").map(l => l.trim()).filter(Boolean));
+  const newLines = newContent.split("\n").map(l => l.trim()).filter(Boolean);
+  let newlyAdded = 0;
+  for (const line of newLines) {
+    if (!oldLines.has(line)) newlyAdded++;
+  }
+  return newlyAdded;
+}
 
 // ... (keep constants and types)
 
@@ -149,9 +160,21 @@ export async function writeMemory(
     };
   }
 
+  const oldContent = await readMemory(agentDir);
+  const discovery = calculateDiscovery(oldContent, content);
+
   await ensureDir(agentDir);
   await fs.writeFile(memoryPath(agentDir), content, "utf8");
-  log.info(`MEMORY.md written: ${charCount}/${MEMORY_CHAR_CAP} chars`);
+  log.info(`MEMORY.md written: ${charCount}/${MEMORY_CHAR_CAP} chars (discovery=${discovery})`);
+
+  if (discovery > 0) {
+    logStrategicMetric({
+        metricType: "discovery",
+        value: discovery,
+        message: `Added ${discovery} new facts to MEMORY.md`,
+    });
+  }
+
   return { ok: true, charCount, cap: MEMORY_CHAR_CAP };
 }
 
@@ -285,4 +308,50 @@ export async function getUserModelCapacity(
   const content = await readUserModel(agentDir);
   const used = content.length;
   return { used, remaining: Math.max(0, USER_CHAR_CAP - used), cap: USER_CHAR_CAP };
+}
+/**
+ * Rollback MEMORY.md and USER.md to the last frozen snapshot.
+ * Returns true if successful, false if no snapshots exist or restore failed.
+ */
+export async function rollbackToLastSnapshot(
+  agentDir: string,
+): Promise<boolean> {
+  const dir = snapshotDir(agentDir);
+  try {
+    const entries = await fs.readdir(dir);
+    const snapshots = entries.filter((e) => e.endsWith(".md")).sort();
+    if (snapshots.length === 0) {
+      log.warn(`No snapshots found for rollback in ${dir}`);
+      return false;
+    }
+
+    const last = snapshots[snapshots.length - 1]!;
+    const snapshotPath = path.join(dir, last);
+    const content = await fs.readFile(snapshotPath, "utf8");
+
+    // Simple parsing of the combined snapshot format
+    const memoryMarker = "# MEMORY.md\n";
+    const userMarker = "\n\n# USER.md\n";
+
+    const memStart = content.indexOf(memoryMarker);
+    const userStart = content.indexOf(userMarker);
+
+    if (memStart === -1 || userStart === -1) {
+      log.error(`Malformed snapshot content: ${snapshotPath}`);
+      return false;
+    }
+
+    const memoryContent = content.slice(memStart + memoryMarker.length, userStart);
+    const userContent = content.slice(userStart + userMarker.length);
+
+    // Write back bypassing the security gate since it's a known-good rollback
+    await fs.writeFile(memoryPath(agentDir), memoryContent, "utf8");
+    await fs.writeFile(userModelPath(agentDir), userContent, "utf8");
+
+    log.info(`Memory rolled back to snapshot: ${last}`);
+    return true;
+  } catch (err) {
+    log.error(`Rollback failed: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
 }

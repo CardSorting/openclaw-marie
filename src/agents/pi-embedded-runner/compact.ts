@@ -75,6 +75,7 @@ import { buildModelAliasLines, resolveModel } from "./model.js";
 import { buildEmbeddedSandboxInfo } from "./sandbox-info.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "./session-manager-cache.js";
 import { resolveEmbeddedRunSkillEntries } from "./skills-runtime.js";
+import { flushMemory } from "../marie-memory-flush.js";
 import {
   applySystemPromptOverrideToSession,
   buildEmbeddedSystemPrompt,
@@ -277,6 +278,12 @@ export async function compactEmbeddedPiSessionDirect(
     };
   };
   const agentDir = params.agentDir ?? resolveOpenClawAgentDir();
+  
+  // Marie Production Hardening: Perform semantic hygiene and recall-based ablation before compaction
+  await flushMemory(agentDir, params.sessionKey).catch((err) => {
+    log.warn(`[compaction] Marie memory flush failed (non-fatal): ${String(err)}`);
+  });
+
   await ensureOpenClawModelsJson(params.config, agentDir);
   const { model, error, authStorage, modelRegistry } = resolveModel(
     provider,

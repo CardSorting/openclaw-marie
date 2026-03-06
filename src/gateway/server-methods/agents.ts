@@ -46,6 +46,7 @@ import {
   validateAgentsUpdateParams,
 } from "../protocol/index.js";
 import { listAgentsForGateway } from "../session-utils.js";
+import { assertValidParams } from "./validation.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 
 const BOOTSTRAP_FILE_NAMES = [
@@ -365,20 +366,6 @@ function resolveOptionalStringParam(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function respondInvalidMethodParams(
-  respond: RespondFn,
-  method: string,
-  errors: Parameters<typeof formatValidationErrors>[0],
-): void {
-  respond(
-    false,
-    undefined,
-    errorShape(
-      ErrorCodes.INVALID_REQUEST,
-      `invalid ${method} params: ${formatValidationErrors(errors)}`,
-    ),
-  );
-}
 
 function isConfiguredAgent(cfg: ReturnType<typeof loadConfig>, agentId: string): boolean {
   return findAgentEntryIndex(listAgentEntries(cfg), agentId) >= 0;
@@ -457,15 +444,7 @@ function respondWorkspaceFileMissing(params: {
 
 export const agentsHandlers: GatewayRequestHandlers = {
   "agents.list": ({ params, respond }) => {
-    if (!validateAgentsListParams(params)) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `invalid agents.list params: ${formatValidationErrors(validateAgentsListParams.errors)}`,
-        ),
-      );
+    if (!assertValidParams(params, validateAgentsListParams, "agents.list", respond)) {
       return;
     }
 
@@ -474,17 +453,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     respond(true, result, undefined);
   },
   "agents.create": async ({ params, respond }) => {
-    if (!validateAgentsCreateParams(params)) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `invalid agents.create params: ${formatValidationErrors(
-            validateAgentsCreateParams.errors,
-          )}`,
-        ),
-      );
+    if (!assertValidParams(params, validateAgentsCreateParams, "agents.create", respond)) {
       return;
     }
 
@@ -546,8 +515,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     respond(true, { ok: true, agentId, name: rawName, workspace: workspaceDir }, undefined);
   },
   "agents.update": async ({ params, respond }) => {
-    if (!validateAgentsUpdateParams(params)) {
-      respondInvalidMethodParams(respond, "agents.update", validateAgentsUpdateParams.errors);
+    if (!assertValidParams(params, validateAgentsUpdateParams, "agents.update", respond)) {
       return;
     }
 
@@ -592,8 +560,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     respond(true, { ok: true, agentId }, undefined);
   },
   "agents.delete": async ({ params, respond }) => {
-    if (!validateAgentsDeleteParams(params)) {
-      respondInvalidMethodParams(respond, "agents.delete", validateAgentsDeleteParams.errors);
+    if (!assertValidParams(params, validateAgentsDeleteParams, "agents.delete", respond)) {
       return;
     }
 
@@ -631,17 +598,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     respond(true, { ok: true, agentId, removedBindings: result.removedBindings }, undefined);
   },
   "agents.files.list": async ({ params, respond }) => {
-    if (!validateAgentsFilesListParams(params)) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `invalid agents.files.list params: ${formatValidationErrors(
-            validateAgentsFilesListParams.errors,
-          )}`,
-        ),
-      );
+    if (!assertValidParams(params, validateAgentsFilesListParams, "agents.files.list", respond)) {
       return;
     }
     const cfg = loadConfig();
@@ -661,8 +618,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     respond(true, { agentId, workspace: workspaceDir, files }, undefined);
   },
   "agents.files.get": async ({ params, respond }) => {
-    if (!validateAgentsFilesGetParams(params)) {
-      respondInvalidMethodParams(respond, "agents.files.get", validateAgentsFilesGetParams.errors);
+    if (!assertValidParams(params, validateAgentsFilesGetParams, "agents.files.get", respond)) {
       return;
     }
     const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond);
@@ -712,8 +668,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     );
   },
   "agents.files.set": async ({ params, respond }) => {
-    if (!validateAgentsFilesSetParams(params)) {
-      respondInvalidMethodParams(respond, "agents.files.set", validateAgentsFilesSetParams.errors);
+    if (!assertValidParams(params, validateAgentsFilesSetParams, "agents.files.set", respond)) {
       return;
     }
     const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond);

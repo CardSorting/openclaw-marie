@@ -101,6 +101,10 @@ export function installSessionToolResultGuard(
     beforeMessageWriteHook?: (
       event: PluginHookBeforeMessageWriteEvent,
     ) => PluginHookBeforeMessageWriteResult | undefined;
+    /**
+     * Optional session key for persistent pending tool call tracking.
+     */
+    sessionKey?: string;
   },
 ): {
   flushPendingToolResults: () => void;
@@ -108,7 +112,7 @@ export function installSessionToolResultGuard(
   getPendingIds: () => string[];
 } {
   const originalAppend = sessionManager.appendMessage.bind(sessionManager);
-  const pendingState = createPendingToolCallState();
+  const pendingState = createPendingToolCallState(opts?.sessionKey);
   const persistMessage = (message: AgentMessage) => {
     const transformer = opts?.transformMessageForPersistence;
     return transformer ? transformer(message) : message;

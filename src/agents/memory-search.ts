@@ -4,6 +4,8 @@ import type { OpenClawConfig, MemorySearchConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import type { SecretInput } from "../config/types.secrets.js";
 import { clampInt, clampNumber, resolveUserPath } from "../utils.js";
+import { createHash } from "node:crypto";
+import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 
 export type ResolvedMemorySearchConfig = {

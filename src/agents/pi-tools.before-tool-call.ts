@@ -70,7 +70,8 @@ async function recordLoopOutcome(args: {
     return;
   }
   try {
-    const { getDiagnosticSessionState, recordToolCallOutcome } = await loadBeforeToolCallRuntime();
+    const { getDiagnosticSessionState, recordToolCallOutcome, saveDiagnosticSessionState } =
+      await loadBeforeToolCallRuntime();
     const sessionState = getDiagnosticSessionState({
       sessionKey: args.ctx.sessionKey,
       sessionId: args.ctx?.agentId,
@@ -82,6 +83,10 @@ async function recordLoopOutcome(args: {
       result: args.result,
       error: args.error,
       config: args.ctx.loopDetection,
+    });
+    saveDiagnosticSessionState({
+      sessionKey: args.ctx.sessionKey,
+      sessionId: args.ctx?.agentId,
     });
   } catch (err) {
     log.warn(`tool loop outcome tracking failed: tool=${args.toolName} error=${String(err)}`);
@@ -98,8 +103,13 @@ export async function runBeforeToolCallHook(args: {
   const params = args.params;
 
   if (args.ctx?.sessionKey) {
-    const { getDiagnosticSessionState, logToolLoopAction, detectToolCallLoop, recordToolCall } =
-      await loadBeforeToolCallRuntime();
+    const {
+      getDiagnosticSessionState,
+      logToolLoopAction,
+      detectToolCallLoop,
+      recordToolCall,
+      saveDiagnosticSessionState,
+    } = await loadBeforeToolCallRuntime();
     const sessionState = getDiagnosticSessionState({
       sessionKey: args.ctx.sessionKey,
       sessionId: args.ctx?.agentId,
@@ -145,6 +155,10 @@ export async function runBeforeToolCallHook(args: {
     }
 
     recordToolCall(sessionState, toolName, params, args.toolCallId, args.ctx.loopDetection);
+    saveDiagnosticSessionState({
+      sessionKey: args.ctx.sessionKey,
+      sessionId: args.ctx?.agentId,
+    });
   }
 
   // ── Joy-Zoning architectural enforcement ──────────────────────────────

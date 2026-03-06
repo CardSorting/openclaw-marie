@@ -118,7 +118,10 @@ import { dropThinkingBlocks } from "../thinking.js";
 import { collectAllowedToolNames } from "../tool-name-allowlist.js";
 import { installToolResultContextGuard } from "../tool-result-context-guard.js";
 import { splitSdkTools } from "../tool-split.js";
+import { logStrategicMetric } from "../../../logging/diagnostic.js";
 import { describeUnknownError, mapThinkingLevel } from "../utils.js";
+
+const FRUSTRATION_TOKENS = ["I cannot", "failed repeated", "unable to", "stop", "refuse", "error", "missing", "broken", "blocked"];
 import { flushPendingToolResultsAfterIdle } from "../wait-for-idle-before-flush.js";
 import {
   selectCompactionTimeoutSnapshot,
@@ -1866,6 +1869,21 @@ export async function runEmbeddedAttempt(
           .catch((err) => {
             log.warn(`llm_output hook failed: ${String(err)}`);
           });
+      }
+
+      const allTexts = assistantTexts.join(" ").toLowerCase();
+      let frustrationCount = 0;
+      for (const token of FRUSTRATION_TOKENS) {
+        if (allTexts.includes(token)) frustrationCount++;
+      }
+      const sentimentValue = Math.min(1.0, frustrationCount / 3.0);
+      if (sentimentValue > 0) {
+        logStrategicMetric({
+          sessionKey: params.sessionKey ?? params.sessionId,
+          metricType: "sentiment",
+          value: sentimentValue,
+          message: `Detected ${frustrationCount} frustration tokens in assistant response.`,
+        });
       }
 
       return {

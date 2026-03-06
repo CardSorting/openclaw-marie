@@ -11,6 +11,8 @@ import {
   type SessionStateValue,
 } from "./diagnostic-session-state.js";
 import { createSubsystemLogger } from "./subsystem.js";
+import { requireNodeSqlite } from "../memory/sqlite.js";
+import { getStrategicEvolutionStore } from "../agents/strategic-evolution-store.js";
 
 const diag = createSubsystemLogger("diagnostic");
 
@@ -428,6 +430,39 @@ export function resetDiagnosticStateForTest(): void {
   webhookStats.lastReceived = 0;
   lastActivityAt = 0;
   stopDiagnosticHeartbeat();
+}
+
+export function logStrategicMetric(params: {
+  sessionKey?: string;
+  metricType: "sentiment" | "discovery" | "surprise";
+  value: number;
+  message?: string;
+}) {
+  diag.info(`strategic metric: type=${params.metricType} value=${params.value} sessionKey=${params.sessionKey ?? "unknown"}${params.message ? ` msg="${params.message}"` : ""}`);
+  
+  // Persist to SQLite
+  if (params.sessionKey) {
+    try {
+      const store = getStrategicEvolutionStore();
+      store.recordMetric({
+        sessionKey: params.sessionKey,
+        type: params.metricType,
+        value: params.value,
+        metadata: { message: params.message },
+      });
+    } catch (err) {
+      diag.warn(`failed to persist strategic metric: ${String(err)}`);
+    }
+  }
+
+  emitDiagnosticEvent({
+    type: "strategic.metric",
+    sessionKey: params.sessionKey,
+    metricType: params.metricType,
+    value: params.value,
+    message: params.message,
+  });
+  markActivity();
 }
 
 export { diag as diagnosticLogger };

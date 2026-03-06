@@ -13,23 +13,49 @@ export type PendingToolCallState = {
   shouldFlushBeforeNewToolCalls: (toolCallCount: number) => boolean;
 };
 
-export function createPendingToolCallState(): PendingToolCallState {
+import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
+
+export function createPendingToolCallState(sessionKey?: string): PendingToolCallState {
   const pending = new Map<string, string | undefined>();
+  const store = sessionKey ? getStrategicEvolutionStore() : undefined;
+  const STATE_KEY = "pending_tool_calls";
+
+  if (sessionKey && store) {
+    const persisted = store.getSessionState<Record<string, string | undefined>>(
+      sessionKey,
+      STATE_KEY,
+    );
+    if (persisted) {
+      for (const [id, name] of Object.entries(persisted)) {
+        pending.set(id, name);
+      }
+    }
+  }
+
+  const saveState = () => {
+    if (sessionKey && store) {
+      store.setSessionState(sessionKey, STATE_KEY, Object.fromEntries(pending));
+    }
+  };
 
   return {
     size: () => pending.size,
     entries: () => pending.entries(),
     getToolName: (id: string) => pending.get(id),
     delete: (id: string) => {
-      pending.delete(id);
+      if (pending.delete(id)) {
+        saveState();
+      }
     },
     clear: () => {
       pending.clear();
+      saveState();
     },
     trackToolCalls: (calls: PendingToolCall[]) => {
       for (const call of calls) {
         pending.set(call.id, call.name);
       }
+      saveState();
     },
     getPendingIds: () => Array.from(pending.keys()),
     shouldFlushForSanitizedDrop: () => pending.size > 0,

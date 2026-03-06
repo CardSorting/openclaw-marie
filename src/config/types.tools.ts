@@ -347,6 +347,15 @@ export type MemorySearchConfig = {
   fallback?: "openai" | "gemini" | "local" | "voyage" | "mistral" | "ollama" | "none";
   /** Embedding model id (remote) or alias (local). */
   model?: string;
+  /** Enable memory-safe privacy mode (default: false). */
+  privacyMode?: boolean;
+  /** Memory overflow and auto-compaction triggers. */
+  overflow?: {
+    /** Enable overflow-based triggers (default: true). */
+    enabled?: boolean;
+    /** Relative threshold for overflow activation (0-1, default: 0.7). */
+    activationThreshold?: number;
+  };
   /** Local embedding settings (node-llama-cpp). */
   local?: {
     /** GGUF model path or hf: URI. */

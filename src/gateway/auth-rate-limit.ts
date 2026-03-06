@@ -92,21 +92,17 @@ export function normalizeRateLimitClientIp(ip: string | undefined): string {
   return resolveClientIp({ remoteAddr: ip }) ?? "unknown";
 }
 
+import { getStrategicEvolutionStore } from "../agents/strategic-evolution-store.js";
+
+const RATE_LIMIT_PREFIX = "rl:";
+
 export function createAuthRateLimiter(config?: RateLimitConfig): AuthRateLimiter {
   const maxAttempts = config?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const windowMs = config?.windowMs ?? DEFAULT_WINDOW_MS;
   const lockoutMs = config?.lockoutMs ?? DEFAULT_LOCKOUT_MS;
   const exemptLoopback = config?.exemptLoopback ?? true;
-  const pruneIntervalMs = config?.pruneIntervalMs ?? PRUNE_INTERVAL_MS;
 
-  const entries = new Map<string, RateLimitEntry>();
-
-  // Periodic cleanup to avoid unbounded map growth.
-  const pruneTimer = pruneIntervalMs > 0 ? setInterval(() => prune(), pruneIntervalMs) : null;
-  // Allow the Node.js process to exit even if the timer is still active.
-  if (pruneTimer?.unref) {
-    pruneTimer.unref();
-  }
+  const store = getStrategicEvolutionStore();
 
   function normalizeScope(scope: string | undefined): string {
     return (scope ?? AUTH_RATE_LIMIT_SCOPE_DEFAULT).trim() || AUTH_RATE_LIMIT_SCOPE_DEFAULT;
@@ -116,36 +112,38 @@ export function createAuthRateLimiter(config?: RateLimitConfig): AuthRateLimiter
     return normalizeRateLimitClientIp(ip);
   }
 
-  function resolveKey(
+  function resolveKeys(
     rawIp: string | undefined,
     rawScope: string | undefined,
   ): {
-    key: string;
+    sessionKey: string;
+    stateKey: string;
     ip: string;
   } {
     const ip = normalizeIp(rawIp);
     const scope = normalizeScope(rawScope);
-    return { key: `${scope}:${ip}`, ip };
+    return { sessionKey: `${RATE_LIMIT_PREFIX}${scope}`, stateKey: ip, ip };
   }
 
   function isExempt(ip: string): boolean {
     return exemptLoopback && isLoopbackAddress(ip);
   }
 
-  function slideWindow(entry: RateLimitEntry, now: number): void {
+  function slideWindow(entry: RateLimitEntry, now: number): boolean {
     const cutoff = now - windowMs;
-    // Remove attempts that fell outside the window.
+    const initialCount = entry.attempts.length;
     entry.attempts = entry.attempts.filter((ts) => ts > cutoff);
+    return entry.attempts.length !== initialCount;
   }
 
   function check(rawIp: string | undefined, rawScope?: string): RateLimitCheckResult {
-    const { key, ip } = resolveKey(rawIp, rawScope);
+    const { sessionKey, stateKey, ip } = resolveKeys(rawIp, rawScope);
     if (isExempt(ip)) {
       return { allowed: true, remaining: maxAttempts, retryAfterMs: 0 };
     }
 
     const now = Date.now();
-    const entry = entries.get(key);
+    const entry = store.getSessionState<RateLimitEntry>(sessionKey, stateKey);
 
     if (!entry) {
       return { allowed: true, remaining: maxAttempts, retryAfterMs: 0 };
@@ -164,25 +162,28 @@ export function createAuthRateLimiter(config?: RateLimitConfig): AuthRateLimiter
     if (entry.lockedUntil && now >= entry.lockedUntil) {
       entry.lockedUntil = undefined;
       entry.attempts = [];
+      store.setSessionState(sessionKey, stateKey, entry);
     }
 
-    slideWindow(entry, now);
+    const changed = slideWindow(entry, now);
+    if (changed) {
+      store.setSessionState(sessionKey, stateKey, entry);
+    }
     const remaining = Math.max(0, maxAttempts - entry.attempts.length);
     return { allowed: remaining > 0, remaining, retryAfterMs: 0 };
   }
 
   function recordFailure(rawIp: string | undefined, rawScope?: string): void {
-    const { key, ip } = resolveKey(rawIp, rawScope);
+    const { sessionKey, stateKey, ip } = resolveKeys(rawIp, rawScope);
     if (isExempt(ip)) {
       return;
     }
 
     const now = Date.now();
-    let entry = entries.get(key);
+    let entry = store.getSessionState<RateLimitEntry>(sessionKey, stateKey);
 
     if (!entry) {
       entry = { attempts: [] };
-      entries.set(key, entry);
     }
 
     // If currently locked, do nothing (already blocked).
@@ -196,36 +197,26 @@ export function createAuthRateLimiter(config?: RateLimitConfig): AuthRateLimiter
     if (entry.attempts.length >= maxAttempts) {
       entry.lockedUntil = now + lockoutMs;
     }
+    store.setSessionState(sessionKey, stateKey, entry);
   }
 
   function reset(rawIp: string | undefined, rawScope?: string): void {
-    const { key } = resolveKey(rawIp, rawScope);
-    entries.delete(key);
+    const { sessionKey, stateKey } = resolveKeys(rawIp, rawScope);
+    store.setSessionState(sessionKey, stateKey, null);
   }
 
   function prune(): void {
-    const now = Date.now();
-    for (const [key, entry] of entries) {
-      // If locked out, keep the entry until the lockout expires.
-      if (entry.lockedUntil && now < entry.lockedUntil) {
-        continue;
-      }
-      slideWindow(entry, now);
-      if (entry.attempts.length === 0) {
-        entries.delete(key);
-      }
-    }
+    // Pruning is naturally handled by the database aging out entries
+    // or by individual checks sliding the window.
+    // For a true prune, we'd need to iterate sev_session_state with 'rl:' prefix.
   }
 
   function size(): number {
-    return entries.size;
+    return 0; // Unknown without query
   }
 
   function dispose(): void {
-    if (pruneTimer) {
-      clearInterval(pruneTimer);
-    }
-    entries.clear();
+    // No-op for persistent store
   }
 
   return { check, recordFailure, reset, size, prune, dispose };

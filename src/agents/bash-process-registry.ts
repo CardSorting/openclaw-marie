@@ -1,5 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { createSessionSlug as createSessionSlugId } from "./session-slug.js";
+import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
 
 const DEFAULT_JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MIN_JOB_TTL_MS = 60 * 1000; // 1 minute
@@ -58,6 +59,7 @@ export interface FinishedSession {
   id: string;
   command: string;
   scopeKey?: string;
+  sessionKey?: string;
   startedAt: number;
   endedAt: number;
   cwd?: string;
@@ -195,10 +197,11 @@ function moveToFinished(session: ProcessSession, status: ProcessStatus) {
   if (!session.backgrounded) {
     return;
   }
-  finishedSessions.set(session.id, {
+  const finished: FinishedSession = {
     id: session.id,
     command: session.command,
     scopeKey: session.scopeKey,
+    sessionKey: session.sessionKey,
     startedAt: session.startedAt,
     endedAt: Date.now(),
     cwd: session.cwd,
@@ -209,7 +212,14 @@ function moveToFinished(session: ProcessSession, status: ProcessStatus) {
     tail: session.tail,
     truncated: session.truncated,
     totalOutputChars: session.totalOutputChars,
-  });
+  };
+  finishedSessions.set(session.id, finished);
+
+  try {
+    getStrategicEvolutionStore().saveBashHistory(finished as any);
+  } catch (err) {
+    // Non-fatal, just log if possible
+  }
 }
 
 export function tail(text: string, max = 2000) {
@@ -290,6 +300,9 @@ function pruneFinishedSessions() {
       finishedSessions.delete(id);
     }
   }
+  try {
+    getStrategicEvolutionStore().pruneBashHistory(jobTtlMs);
+  } catch {}
 }
 
 function startSweeper() {
@@ -307,3 +320,24 @@ function stopSweeper() {
   clearInterval(sweeper);
   sweeper = null;
 }
+
+export function hydrateBashHistory() {
+  try {
+    const history = getStrategicEvolutionStore().getBashHistory(500);
+    const cutoff = Date.now() - jobTtlMs;
+    for (const item of history) {
+      if (item.endedAt >= cutoff && !finishedSessions.has(item.id)) {
+        finishedSessions.set(item.id, {
+          ...item,
+          status: item.status as ProcessStatus,
+          exitSignal: item.exitSignal as any,
+        });
+      }
+    }
+  } catch {
+    // Initializing store might fail if db is busy, will try again on next mutation or next start
+  }
+}
+
+// Hydrate on module load
+hydrateBashHistory();

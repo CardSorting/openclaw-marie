@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
+import { logStrategicMetric } from "../logging/diagnostic.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import type { PluginHookAfterToolCallEvent } from "../plugins/types.js";
@@ -442,6 +443,23 @@ export async function handleToolExecutionEnd(
   );
 
   emitToolResultOutput({ ctx, toolName, meta, isToolError, result, sanitizedResult });
+
+  // Marie Production Hardening: Surprise Score Telemetry
+  let surprise = 0;
+  if (isToolError) surprise = 0.4;
+  const outputText = extractToolResultText(sanitizedResult)?.toLowerCase() ?? "";
+  if (outputText.includes("not found") || outputText.includes("no such file")) surprise = Math.max(surprise, 0.7);
+  if (outputText.includes("permission denied") || outputText.includes("access denied")) surprise = Math.max(surprise, 0.8);
+  if (outputText.includes("fatal") || outputText.includes("critical error") || outputText.includes("panic")) surprise = Math.max(surprise, 1.0);
+  
+  if (surprise > 0) {
+    logStrategicMetric({
+      sessionKey: ctx.params.sessionKey ?? ctx.params.sessionId,
+      metricType: "surprise",
+      value: surprise,
+      message: `Tool ${toolName} terminated with surprise score ${surprise.toFixed(2)}`,
+    });
+  }
 
   // Run after_tool_call plugin hook (fire-and-forget)
   const hookRunnerAfter = ctx.hookRunner ?? getGlobalHookRunner();

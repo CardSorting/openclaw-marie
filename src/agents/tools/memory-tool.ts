@@ -7,6 +7,8 @@ import type { MemorySearchResult } from "../../memory/types.js";
 import { parseAgentSessionKey } from "../../routing/session-key.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { resolveMemorySearchConfig } from "../memory-search.js";
+import { createHash } from "node:crypto";
+import { getStrategicEvolutionStore } from "../strategic-evolution-store.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
 
@@ -74,6 +76,25 @@ export function createMemorySearchTool(options: {
           minScore,
           sessionKey: options.agentSessionKey,
         });
+
+        // Record recall hits for data-driven memory hygiene
+        if (options.agentSessionKey) {
+            try {
+                const store = getStrategicEvolutionStore();
+                for (const res of rawResults) {
+                    const lines = res.snippet.split("\n");
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (trimmed.length > 10) {
+                            const hash = createHash("sha256").update(trimmed).digest("hex").slice(0, 16);
+                            store.recordRecallHit(options.agentSessionKey, hash);
+                        }
+                    }
+                }
+            } catch (err) {
+                // Silently continue if store fails
+            }
+        }
         const status = manager.status();
         const decorated = decorateCitations(rawResults, includeCitations);
         const resolved = resolveMemoryBackendConfig({ cfg, agentId });

@@ -158,6 +158,14 @@ export type DiagnosticJoyZoningEvent = DiagnosticBaseEvent & {
   agentId?: string;
 };
 
+export type DiagnosticStrategicMetricEvent = DiagnosticBaseEvent & {
+  type: "strategic.metric";
+  sessionKey?: string;
+  metricType: "sentiment" | "discovery" | "surprise";
+  value: number;
+  message?: string;
+};
+
 export type DiagnosticEventPayload =
   | DiagnosticUsageEvent
   | DiagnosticWebhookReceivedEvent
@@ -172,7 +180,8 @@ export type DiagnosticEventPayload =
   | DiagnosticRunAttemptEvent
   | DiagnosticHeartbeatEvent
   | DiagnosticToolLoopEvent
-  | DiagnosticJoyZoningEvent;
+  | DiagnosticJoyZoningEvent
+  | DiagnosticStrategicMetricEvent;
 
 export type DiagnosticEventInput = DiagnosticEventPayload extends infer Event
   ? Event extends DiagnosticEventPayload

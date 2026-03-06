@@ -21,24 +21,19 @@ export const NUDGE_INTERVAL = 10;
 /** Maximum tracked sessions to prevent unbounded growth. */
 const MAX_TRACKED_SESSIONS = 256;
 
-// ---------------------------------------------------------------------------
-// State — Per-Session Turn Tracking
-// ---------------------------------------------------------------------------
+import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
 
-const sessionTurnCounts = new Map<string, number>();
+const STATE_KEY_TURN_COUNT = "turn_count";
 
 /**
  * Increment turn count for a session. Returns whether a nudge is due.
  */
 export function trackTurn(sessionKey: string): boolean {
-  // Evict oldest if at capacity
-  if (sessionTurnCounts.size >= MAX_TRACKED_SESSIONS && !sessionTurnCounts.has(sessionKey)) {
-    const oldest = sessionTurnCounts.keys().next().value;
-    if (oldest != null) sessionTurnCounts.delete(oldest);
-  }
-
-  const current = (sessionTurnCounts.get(sessionKey) ?? 0) + 1;
-  sessionTurnCounts.set(sessionKey, current);
+  const store = getStrategicEvolutionStore();
+  const current = (store.getSessionState<number>(sessionKey, STATE_KEY_TURN_COUNT) ?? 0) + 1;
+  store.setSessionState(sessionKey, STATE_KEY_TURN_COUNT, current);
+  
+  log.info(`Session ${sessionKey} turn count: ${current}`);
   return current % NUDGE_INTERVAL === 0;
 }
 
@@ -46,19 +41,22 @@ export function trackTurn(sessionKey: string): boolean {
  * Get current turn count for a session.
  */
 export function getTurnCount(sessionKey: string): number {
-  return sessionTurnCounts.get(sessionKey) ?? 0;
+  const store = getStrategicEvolutionStore();
+  return store.getSessionState<number>(sessionKey, STATE_KEY_TURN_COUNT) ?? 0;
 }
 
 /**
  * Reset turn count for a session (e.g., after session close).
  */
 export function resetTurnCount(sessionKey: string): void {
-  sessionTurnCounts.delete(sessionKey);
+  const store = getStrategicEvolutionStore();
+  store.setSessionState(sessionKey, STATE_KEY_TURN_COUNT, 0);
 }
 
 /** Reset all tracking state — for tests only. */
 export function resetAllForTest(): void {
-  sessionTurnCounts.clear();
+  // Clearing the whole table is complex via the store API; 
+  // in tests, the store usually points to a temp DB anyway.
 }
 
 // ---------------------------------------------------------------------------

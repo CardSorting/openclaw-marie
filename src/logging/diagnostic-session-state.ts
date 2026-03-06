@@ -32,6 +32,19 @@ const SESSION_STATE_MAX_ENTRIES = 2000;
 
 let lastSessionPruneAt = 0;
 
+function resolveSessionKey({ sessionKey, sessionId }: SessionRef) {
+  return sessionKey ?? sessionId ?? "unknown";
+}
+
+function findStateBySessionId(sessionId: string): SessionState | undefined {
+  for (const state of diagnosticSessionStates.values()) {
+    if (state.sessionId === sessionId) {
+      return state;
+    }
+  }
+  return undefined;
+}
+
 export function pruneDiagnosticSessionStates(now = Date.now(), force = false): void {
   const shouldPruneForSize = diagnosticSessionStates.size > SESSION_STATE_MAX_ENTRIES;
   if (!force && !shouldPruneForSize && now - lastSessionPruneAt < SESSION_STATE_PRUNE_INTERVAL_MS) {
@@ -63,43 +76,79 @@ export function pruneDiagnosticSessionStates(now = Date.now(), force = false): v
   }
 }
 
-function resolveSessionKey({ sessionKey, sessionId }: SessionRef) {
-  return sessionKey ?? sessionId ?? "unknown";
-}
+import { getStrategicEvolutionStore } from "../agents/strategic-evolution-store.js";
 
-function findStateBySessionId(sessionId: string): SessionState | undefined {
-  for (const state of diagnosticSessionStates.values()) {
-    if (state.sessionId === sessionId) {
-      return state;
-    }
+export function saveDiagnosticSessionState(ref: SessionRef): void {
+  const key = resolveSessionKey(ref);
+  const state = diagnosticSessionStates.get(key);
+  if (!state) {
+    return;
   }
-  return undefined;
+
+  const store = getStrategicEvolutionStore();
+  const toPersist = {
+    toolCallHistory: state.toolCallHistory,
+    toolLoopWarningBuckets: state.toolLoopWarningBuckets
+      ? Object.fromEntries(state.toolLoopWarningBuckets)
+      : undefined,
+    commandPollCounts: state.commandPollCounts
+      ? Object.fromEntries(state.commandPollCounts)
+      : undefined,
+  };
+  store.setSessionState(key, "diagnostic_state", toPersist);
 }
 
 export function getDiagnosticSessionState(ref: SessionRef): SessionState {
   pruneDiagnosticSessionStates();
   const key = resolveSessionKey(ref);
-  const existing =
+  let state =
     diagnosticSessionStates.get(key) ?? (ref.sessionId && findStateBySessionId(ref.sessionId));
-  if (existing) {
-    if (ref.sessionId) {
-      existing.sessionId = ref.sessionId;
+
+  if (!state) {
+    state = {
+      sessionId: ref.sessionId,
+      sessionKey: ref.sessionKey,
+      lastActivity: Date.now(),
+      state: "idle",
+      queueDepth: 0,
+    };
+    diagnosticSessionStates.set(key, state);
+
+    // Attempt to hydrate from persistent store
+    try {
+      const store = getStrategicEvolutionStore();
+      const persisted = store.getSessionState<{
+        toolCallHistory?: ToolCallRecord[];
+        toolLoopWarningBuckets?: Record<string, number>;
+        commandPollCounts?: Record<string, { count: number; lastPollAt: number }>;
+      }>(key, "diagnostic_state");
+
+      if (persisted) {
+        if (persisted.toolCallHistory) {
+          state.toolCallHistory = persisted.toolCallHistory;
+        }
+        if (persisted.toolLoopWarningBuckets) {
+          state.toolLoopWarningBuckets = new Map(Object.entries(persisted.toolLoopWarningBuckets));
+        }
+        if (persisted.commandPollCounts) {
+          state.commandPollCounts = new Map(Object.entries(persisted.commandPollCounts));
+        }
+      }
+    } catch (err) {
+      // Persistence is best-effort for diagnostics
     }
-    if (ref.sessionKey) {
-      existing.sessionKey = ref.sessionKey;
-    }
-    return existing;
+
+    pruneDiagnosticSessionStates(Date.now(), true);
   }
-  const created: SessionState = {
-    sessionId: ref.sessionId,
-    sessionKey: ref.sessionKey,
-    lastActivity: Date.now(),
-    state: "idle",
-    queueDepth: 0,
-  };
-  diagnosticSessionStates.set(key, created);
-  pruneDiagnosticSessionStates(Date.now(), true);
-  return created;
+
+  if (ref.sessionId) {
+    state.sessionId = ref.sessionId;
+  }
+  if (ref.sessionKey) {
+    state.sessionKey = ref.sessionKey;
+  }
+
+  return state;
 }
 
 export function getDiagnosticSessionStateCountForTest(): number {

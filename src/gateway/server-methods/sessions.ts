@@ -699,8 +699,29 @@ export const sessionsHandlers: GatewayRequestHandlers = {
     }
 
     const archived = archiveFileOnDisk(filePath, "bak");
-    const keptLines = lines.slice(-maxLines);
-    fs.writeFileSync(filePath, `${keptLines.join("\n")}\n`, "utf-8");
+    
+    // Preserve the session header (first line) if it's a valid JSON header.
+    // This ensures sessionId, version, and cwd metadata are not lost during truncation.
+    const firstLine = lines[0];
+    let header: string | undefined;
+    try {
+      if (firstLine) {
+        const parsed = JSON.parse(firstLine);
+        if (parsed && typeof parsed === "object" && parsed.type === "session") {
+          header = firstLine;
+        }
+      }
+    } catch {
+      // Not a JSON header or invalid JSON; skip preservation and treat as message.
+    }
+
+    const bodyLines = header ? lines.slice(1) : lines;
+    // If we have a header, we keep maxLines - 1 from the body to honor the maxLines budget.
+    const keptBodyBudget = header ? Math.max(0, maxLines - 1) : maxLines;
+    const keptBodyLines = bodyLines.slice(-keptBodyBudget);
+    const finalLines = header ? [header, ...keptBodyLines] : keptBodyLines;
+
+    fs.writeFileSync(filePath, `${finalLines.join("\n")}\n`, "utf-8");
 
     await updateSessionStore(storePath, (store) => {
       const entryKey = compactTarget.primaryKey;
@@ -722,7 +743,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         key: target.canonicalKey,
         compacted: true,
         archived,
-        kept: keptLines.length,
+        kept: finalLines.length,
       },
       undefined,
     );
