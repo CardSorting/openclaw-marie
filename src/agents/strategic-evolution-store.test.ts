@@ -1,20 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
+import { getStrategicEvolutionStore, resetStrategicEvolutionStoreForTest } from "./strategic-evolution-store.js";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
 
 describe("StrategicEvolutionStore", () => {
     let testDbPath: string;
-    let store: ReturnType<typeof getStrategicEvolutionStore>;
+    let store: Awaited<ReturnType<typeof getStrategicEvolutionStore>>;
 
-    beforeEach(() => {
+    beforeEach(async () => {
+        resetStrategicEvolutionStoreForTest();
         const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-test-"));
         testDbPath = path.join(tmpDir, "test-strategic.sqlite");
-        store = getStrategicEvolutionStore(testDbPath);
+        store = await getStrategicEvolutionStore(testDbPath);
     });
 
     afterEach(() => {
+        resetStrategicEvolutionStoreForTest();
         if (fs.existsSync(testDbPath)) {
             // Optional: cleanup
         }

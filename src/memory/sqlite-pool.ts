@@ -1,5 +1,7 @@
-import { requireNodeSqlite } from "./sqlite.js";
+import { requireNodeSqlite, type DatabaseSync } from "./sqlite.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import fs from "node:fs";
+import path from "node:path";
 
 const log = createSubsystemLogger("memory/sqlite-pool");
 
@@ -15,9 +17,10 @@ export interface SqlitePoolConfig {
  */
 export class SqliteConnectionPool {
   private readonly config: SqlitePoolConfig;
-  private readonly connections: any[] = [];
+  private readonly connections: DatabaseSync[] = [];
   private readonly writeMutex = new WriteMutex();
   private initialized = false;
+  private readIndex = 0;
 
   constructor(config: SqlitePoolConfig) {
     this.config = {
@@ -34,36 +37,48 @@ export class SqliteConnectionPool {
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
-      const sqlite = requireNodeSqlite();
-      const poolSize = Math.max(1, this.config.poolSize || 1);
+      try {
+        const sqlite = requireNodeSqlite();
+        const poolSize = Math.max(1, this.config.poolSize || 1);
 
-      this.connections.length = 0;
-
-      for (let i = 0; i < poolSize; i++) {
-        try {
-          const db = new sqlite.DatabaseSync(this.config.dbPath);
-          this.setupConnection(db);
-          this.connections.push(db);
-        } catch (err) {
-          log.error(`Failed to open SQLite database at ${this.config.dbPath}: ${err instanceof Error ? err.message : String(err)}`);
-          this.initPromise = null;
-          throw err;
+        // Ensure parent directory exists for non-memory databases
+        if (this.config.dbPath !== ":memory:") {
+          const dir = path.dirname(this.config.dbPath);
+          if (!fs.existsSync(dir)) {
+            log.info(`Creating missing database directory: ${dir}`);
+            fs.mkdirSync(dir, { recursive: true });
+          }
         }
-      }
 
-      if (this.connections.length === 0) {
-        this.initPromise = null;
-        throw new Error(`Failed to initialize SQLite pool: no connections established for ${this.config.dbPath}`);
-      }
+        this.connections.length = 0;
 
-      this.initialized = true;
-      log.info(`Initialized SQLite pool at ${this.config.dbPath} with ${this.connections.length} connections.`);
+        for (let i = 0; i < poolSize; i++) {
+          try {
+            const db = new sqlite.DatabaseSync(this.config.dbPath);
+            this.setupConnection(db);
+            this.connections.push(db);
+          } catch (err) {
+            log.error(`Failed to open SQLite connection ${i} at ${this.config.dbPath}: ${err instanceof Error ? err.message : String(err)}`);
+            throw err;
+          }
+        }
+
+        if (this.connections.length === 0) {
+          throw new Error(`Failed to initialize SQLite pool: no connections established for ${this.config.dbPath}`);
+        }
+
+        this.initialized = true;
+        log.info(`Initialized SQLite pool at ${this.config.dbPath} with ${this.connections.length} connections.`);
+      } catch (err) {
+        this.initPromise = null; // Allow retry on failure
+        throw err;
+      }
     })();
 
     return this.initPromise;
   }
 
-  private setupConnection(db: any): void {
+  private setupConnection(db: DatabaseSync): void {
     db.exec(`PRAGMA journal_mode = WAL;`);
     db.exec(`PRAGMA synchronous = NORMAL;`);
     db.exec(`PRAGMA busy_timeout = ${this.config.busyTimeout};`);
@@ -73,25 +88,22 @@ export class SqliteConnectionPool {
 
   /**
    * Acquire a connection for a read operation.
-   * In a synchronous pool, this just returns an available connection.
+   * Uses round-robin selection.
    */
-  public acquireRead(): any {
+  public acquireRead(): DatabaseSync {
     if (!this.initialized) {
-      // Synchronous acquireRead cannot await initialization.
-      // Callers should ensure the pool is initialized before calling this,
-      // or we should make this async. For now, throw if not ready.
       throw new Error(`SqliteConnectionPool not initialized. Path: ${this.config.dbPath}`);
     }
-    // For now, just rotate through connections (simple round-robin)
-    const conn = this.connections.shift();
-    this.connections.push(conn);
+    
+    const conn = this.connections[this.readIndex];
+    this.readIndex = (this.readIndex + 1) % this.connections.length;
     return conn;
   }
 
   /**
    * Execute a write operation protected by the WriteMutex.
    */
-  public async withWriteLock<T>(op: (db: any) => T): Promise<T> {
+  public async withWriteLock<T>(op: (db: DatabaseSync) => T): Promise<T> {
     if (!this.initialized) await this.initialize();
     await this.writeMutex.lock();
     try {
@@ -105,7 +117,7 @@ export class SqliteConnectionPool {
   /**
    * Execute a transaction protected by the WriteMutex.
    */
-  public async transaction<T>(op: (db: any) => T): Promise<T> {
+  public async transaction<T>(op: (db: DatabaseSync) => T): Promise<T> {
     return this.withWriteLock((db) => {
       db.exec("BEGIN IMMEDIATE;");
       try {
@@ -119,6 +131,15 @@ export class SqliteConnectionPool {
     });
   }
 
+  public getStatus() {
+    return {
+      initialized: this.initialized,
+      dbPath: this.config.dbPath,
+      poolSize: this.connections.length,
+      lockWaiting: this.writeMutex.isLocked(),
+    };
+  }
+
   public close(): void {
     for (const db of this.connections) {
       try {
@@ -130,27 +151,40 @@ export class SqliteConnectionPool {
     this.connections.length = 0;
     this.initialized = false;
     this.initPromise = null;
+    this.readIndex = 0;
   }
 }
 
+/**
+ * A simple queue-based mutex to ensure fairness and prevent thundering herds.
+ */
 class WriteMutex {
-  private promise?: Promise<void>;
-  private resolve?: () => void;
+  private queue: (() => void)[] = [];
+  private locked = false;
 
   async lock(): Promise<void> {
-    while (this.promise) {
-      await this.promise;
+    if (!this.locked) {
+      this.locked = true;
+      return;
     }
-    this.promise = new Promise((resolve) => {
-      this.resolve = resolve;
+    return new Promise((resolve) => {
+      this.queue.push(resolve);
     });
   }
 
   unlock(): void {
-    const resolve = this.resolve;
-    this.promise = undefined;
-    this.resolve = undefined;
-    resolve?.();
+    const next = this.queue.shift();
+    if (next) {
+      // If there's someone waiting, they get the lock immediately.
+      // We don't set locked = false here because the lock is passed directly to 'next'.
+      next();
+    } else {
+      this.locked = false;
+    }
+  }
+
+  isLocked(): boolean {
+    return this.locked;
   }
 }
 
@@ -158,10 +192,11 @@ class WriteMutex {
 const globalPools = new Map<string, SqliteConnectionPool>();
 
 export function getGlobalSqlitePool(dbPath: string): SqliteConnectionPool {
-  let pool = globalPools.get(dbPath);
+  const resolvedPath = dbPath === ":memory:" ? dbPath : path.resolve(dbPath);
+  let pool = globalPools.get(resolvedPath);
   if (!pool) {
-    pool = new SqliteConnectionPool({ dbPath });
-    globalPools.set(dbPath, pool);
+    pool = new SqliteConnectionPool({ dbPath: resolvedPath });
+    globalPools.set(resolvedPath, pool);
   }
   return pool;
 }

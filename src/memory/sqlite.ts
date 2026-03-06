@@ -1,7 +1,10 @@
 import { createRequire } from "node:module";
+import type { DatabaseSync } from "node:sqlite";
 import { installProcessWarningFilter } from "../infra/warning-filter.js";
 
 const require = createRequire(import.meta.url);
+
+export type { DatabaseSync };
 
 export function requireNodeSqlite(): typeof import("node:sqlite") {
   installProcessWarningFilter();
