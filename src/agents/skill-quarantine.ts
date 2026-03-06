@@ -1,4 +1,7 @@
+import crypto from "node:crypto";
+import path from "node:path";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { scanDirectoryWithSummary } from "../security/skill-scanner.js";
 
 const log = createSubsystemLogger("agents/skill-quarantine");
 
@@ -16,6 +19,12 @@ export interface QuarantineResult {
  * Includes static analysis, sandboxed dry-run, and cryptographic signing.
  */
 export class SkillQuarantine {
+  private readonly secretKey: string;
+
+  constructor(params?: { secretKey?: string }) {
+    this.secretKey = params?.secretKey || "marie-fallback-quarantine-key";
+  }
+
   /**
    * Run a skill through the quarantine pipeline.
    */
@@ -23,11 +32,20 @@ export class SkillQuarantine {
     const findings: string[] = [];
 
     // 1. Static Analysis (leverages existing skill-scanner.ts)
-    // Placeholder: call existing scanner
-    const staticPass = await this.runStaticAnalysis(skillPath, findings);
+    const scanSummary = await scanDirectoryWithSummary(skillPath);
+    
+    if (scanSummary.critical > 0) {
+      findings.push(...scanSummary.findings
+        .filter(f => f.severity === "critical")
+        .map(f => `${f.ruleId}: ${f.message} (${path.basename(f.file)}:${f.line})`)
+      );
+    }
 
-    // 2. Sandboxed Dry-Run (Restricted: no fs, no network, no exec)
-    const dryRunPass = staticPass && await this.runSandboxedDryRun(skillPath, findings);
+    const staticPass = scanSummary.critical === 0;
+
+    // 2. Sandboxed Dry-Run (Future: Restricted: no fs, no network, no exec)
+    // Currently focused on static pass completeness
+    const dryRunPass = staticPass;
 
     const passed = staticPass && dryRunPass;
 
@@ -47,22 +65,26 @@ export class SkillQuarantine {
    * Verify if a skill has a valid trust elevation signature.
    */
   async verifyTrust(skillPath: string, signature: string): Promise<boolean> {
-    // Placeholder: check signature against trusted public key
-    return !!signature;
-  }
-
-  private async runStaticAnalysis(skillPath: string, findings: string[]): Promise<boolean> {
-    // Logic would use src/security/skill-scanner.ts
-    return true;
-  }
-
-  private async runSandboxedDryRun(skillPath: string, findings: string[]): Promise<boolean> {
-    // Dry-run implementation
-    return true;
+    if (!signature) {
+      return false;
+    }
+    const expected = this.signSkill(skillPath);
+    const signatureBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expected);
+    
+    if (signatureBuffer.length !== expectedBuffer.length) {
+      return false;
+    }
+    
+    return crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
   }
 
   private signSkill(skillPath: string): string {
-    // Placeholder signature
-    return "marie-trusted-signature-placeholder";
+    // We sign the normalized skill path to prevent bypass via symbolic links or relative paths
+    const normalizedPath = path.resolve(skillPath);
+    return crypto
+      .createHmac("sha256", this.secretKey)
+      .update(normalizedPath)
+      .digest("hex");
   }
 }

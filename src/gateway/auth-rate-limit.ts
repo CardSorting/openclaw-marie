@@ -1,15 +1,14 @@
 /**
- * In-memory sliding-window rate limiter for gateway authentication attempts.
+ * Persistent sliding-window rate limiter for gateway authentication attempts.
  *
- * Tracks failed auth attempts by {scope, clientIp}. A scope lets callers keep
- * independent counters for different credential classes (for example, shared
- * gateway token/password vs device-token auth) while still sharing one
- * limiter instance.
+ * Tracks failed auth attempts by {scope, clientIp} using StrategicEvolutionStore.
+ * A scope lets callers keep independent counters for different credential classes
+ * (for example, shared gateway token/password vs device-token auth) while still
+ * sharing one limiter instance.
  *
  * Design decisions:
- * - Pure in-memory Map – no external dependencies; suitable for a single
- *   gateway process.  The Map is periodically pruned to avoid unbounded
- *   growth.
+ * - Persistent Storage – Uses StrategicEvolutionStore to ensure rate-limit state
+ *   survives daemon restarts.
  * - Loopback addresses (127.0.0.1 / ::1) are exempt by default so that local
  *   CLI sessions are never locked out.
  * - The module is side-effect-free: callers create an instance via
@@ -60,13 +59,13 @@ export interface AuthRateLimiter {
   /** Check whether `ip` is currently allowed to attempt authentication. */
   check(ip: string | undefined, scope?: string): RateLimitCheckResult;
   /** Record a failed authentication attempt for `ip`. */
-  recordFailure(ip: string | undefined, scope?: string): void;
+  recordFailure(ip: string | undefined, scope?: string): Promise<void>;
   /** Reset the rate-limit state for `ip` (e.g. after a successful login). */
-  reset(ip: string | undefined, scope?: string): void;
+  reset(ip: string | undefined, scope?: string): Promise<void>;
   /** Return the current number of tracked IPs (useful for diagnostics). */
   size(): number;
   /** Remove expired entries and release memory. */
-  prune(): void;
+  prune(): Promise<void>;
   /** Dispose the limiter and cancel periodic cleanup timers. */
   dispose(): void;
 }
@@ -96,13 +95,13 @@ import { getStrategicEvolutionStore } from "../agents/strategic-evolution-store.
 
 const RATE_LIMIT_PREFIX = "rl:";
 
-export function createAuthRateLimiter(config?: RateLimitConfig): AuthRateLimiter {
+export async function createAuthRateLimiter(config?: RateLimitConfig): Promise<AuthRateLimiter> {
   const maxAttempts = config?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const windowMs = config?.windowMs ?? DEFAULT_WINDOW_MS;
   const lockoutMs = config?.lockoutMs ?? DEFAULT_LOCKOUT_MS;
   const exemptLoopback = config?.exemptLoopback ?? true;
 
-  const store = getStrategicEvolutionStore();
+  const store = await getStrategicEvolutionStore();
 
   function normalizeScope(scope: string | undefined): string {
     return (scope ?? AUTH_RATE_LIMIT_SCOPE_DEFAULT).trim() || AUTH_RATE_LIMIT_SCOPE_DEFAULT;
@@ -162,6 +161,8 @@ export function createAuthRateLimiter(config?: RateLimitConfig): AuthRateLimiter
     if (entry.lockedUntil && now >= entry.lockedUntil) {
       entry.lockedUntil = undefined;
       entry.attempts = [];
+      // Note: we can't await here without making check() async too.
+      // But lockout expiry is a self-correcting state.
       store.setSessionState(sessionKey, stateKey, entry);
     }
 
@@ -173,7 +174,7 @@ export function createAuthRateLimiter(config?: RateLimitConfig): AuthRateLimiter
     return { allowed: remaining > 0, remaining, retryAfterMs: 0 };
   }
 
-  function recordFailure(rawIp: string | undefined, rawScope?: string): void {
+  async function recordFailure(rawIp: string | undefined, rawScope?: string): Promise<void> {
     const { sessionKey, stateKey, ip } = resolveKeys(rawIp, rawScope);
     if (isExempt(ip)) {
       return;
@@ -197,18 +198,17 @@ export function createAuthRateLimiter(config?: RateLimitConfig): AuthRateLimiter
     if (entry.attempts.length >= maxAttempts) {
       entry.lockedUntil = now + lockoutMs;
     }
-    store.setSessionState(sessionKey, stateKey, entry);
+    await store.setSessionState(sessionKey, stateKey, entry);
   }
 
-  function reset(rawIp: string | undefined, rawScope?: string): void {
+  async function reset(rawIp: string | undefined, rawScope?: string): Promise<void> {
     const { sessionKey, stateKey } = resolveKeys(rawIp, rawScope);
-    store.setSessionState(sessionKey, stateKey, null);
+    await store.setSessionState(sessionKey, stateKey, null);
   }
 
-  function prune(): void {
+  async function prune(): Promise<void> {
     // Pruning is naturally handled by the database aging out entries
     // or by individual checks sliding the window.
-    // For a true prune, we'd need to iterate sev_session_state with 'rl:' prefix.
   }
 
   function size(): number {

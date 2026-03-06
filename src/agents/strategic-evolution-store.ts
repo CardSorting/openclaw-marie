@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
-import type { DatabaseSync } from "node:sqlite";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { requireNodeSqlite } from "../memory/sqlite.js";
+import { SqliteConnectionPool, getGlobalSqlitePool } from "../memory/sqlite-pool.js";
 
 const log = createSubsystemLogger("agents/strategic-evolution-store");
 
@@ -81,58 +80,73 @@ CREATE INDEX IF NOT EXISTS idx_bash_history_ended ON sev_bash_history(endedAt);
 `;
 
 export class StrategicEvolutionStore {
-  private db: DatabaseSync;
+  private pool: SqliteConnectionPool;
   private stmtCache = new Map<string, any>();
 
-  constructor(db: DatabaseSync) {
-    this.db = db;
-    this.initialize();
+  private constructor(pool: SqliteConnectionPool) {
+    this.pool = pool;
   }
 
-  private initialize(): void {
-    this.db.exec(SCHEMA_SQL);
+  public static async create(pool: SqliteConnectionPool): Promise<StrategicEvolutionStore> {
+    const store = new StrategicEvolutionStore(pool);
+    await store.initialize();
+    return store;
   }
 
-  private prepare(sql: string): any {
-    let stmt = this.stmtCache.get(sql);
-    if (!stmt) {
-      stmt = this.db.prepare(sql);
-      this.stmtCache.set(sql, stmt);
-    }
-    return stmt;
+  private async initialize(): Promise<void> {
+    await this.pool.initialize();
+    await this.pool.withWriteLock((db) => {
+      db.exec(SCHEMA_SQL);
+    });
   }
 
-  public recordMetric(params: {
+  private prepare(db: any, sql: string): any {
+    // Statement caching is still database-specific if using multiple connections.
+    // However, since we use a shared pool and node:sqlite is synchronous,
+    // we can either cache per-connection or just prepare fresh.
+    // For simplicity with the pool, we'll prepare fresh for now or implement a better cache.
+    return db.prepare(sql);
+  }
+
+  public async recordMetric(params: {
     sessionKey: string;
     type: MetricType;
     value: number;
     metadata?: any;
-  }): string {
+  }): Promise<string> {
     const id = randomUUID();
     const now = Date.now();
     const metadataStr = params.metadata ? JSON.stringify(params.metadata) : null;
 
-    this.prepare(
-      `INSERT INTO sev_metrics (id, sessionKey, type, value, metadata, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(id, params.sessionKey, params.type, params.value, metadataStr, now);
+    await this.pool.withWriteLock((db) => {
+      this.prepare(
+        db,
+        `INSERT INTO sev_metrics (id, sessionKey, type, value, metadata, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(id, params.sessionKey, params.type, params.value, metadataStr, now);
+    });
 
     return id;
   }
 
-  public recordRecallHit(sessionKey: string, lineHash: string): void {
+  public async recordRecallHit(sessionKey: string, lineHash: string): Promise<void> {
     const now = Date.now();
-    this.prepare(
-      `INSERT INTO sev_recall_hits (sessionKey, lineHash, hitCount, lastRecallTs)
-       VALUES (?, ?, 1, ?)
-       ON CONFLICT(sessionKey, lineHash) DO UPDATE SET
-       hitCount = hitCount + 1,
-       lastRecallTs = ?`
-    ).run(sessionKey, lineHash, now, now);
+    await this.pool.withWriteLock((db) => {
+      this.prepare(
+        db,
+        `INSERT INTO sev_recall_hits (sessionKey, lineHash, hitCount, lastRecallTs)
+         VALUES (?, ?, 1, ?)
+         ON CONFLICT(sessionKey, lineHash) DO UPDATE SET
+         hitCount = hitCount + 1,
+         lastRecallTs = ?`
+      ).run(sessionKey, lineHash, now, now);
+    });
   }
 
   public getRecallHits(sessionKey: string, lineHash: string): number {
+    const db = this.pool.acquireRead();
     const row = this.prepare(
-        `SELECT hitCount FROM sev_recall_hits WHERE sessionKey = ? AND lineHash = ?`
+      db,
+      `SELECT hitCount FROM sev_recall_hits WHERE sessionKey = ? AND lineHash = ?`
     ).get(sessionKey, lineHash) as { hitCount: number } | undefined;
     return row?.hitCount ?? 0;
   }
@@ -153,11 +167,17 @@ export class StrategicEvolutionStore {
     sql += ` ORDER BY createdAt DESC LIMIT ?`;
     args.push(params.limit ?? 50);
 
-    return this.prepare(sql).all(...args) as StoredMetric[];
+    const db = this.pool.acquireRead();
+    return this.prepare(db, sql).all(...args) as StoredMetric[];
   }
 
-  public getStats(params: { sessionKey: string; type: MetricType }): { mean: number; stdDev: number; count: number } {
+  public getStats(params: {
+    sessionKey: string;
+    type: MetricType;
+  }): { mean: number; stdDev: number; count: number } {
+    const db = this.pool.acquireRead();
     const rows = this.prepare(
+      db,
       `SELECT value FROM sev_metrics WHERE sessionKey = ? AND type = ? ORDER BY createdAt DESC LIMIT 100`
     ).all(params.sessionKey, params.type) as { value: number }[];
 
@@ -172,20 +192,25 @@ export class StrategicEvolutionStore {
     return { mean, stdDev, count };
   }
 
-  public setSessionState(sessionKey: string, key: string, value: any): void {
+  public async setSessionState(sessionKey: string, key: string, value: any): Promise<void> {
     const now = Date.now();
     const valStr = typeof value === "string" ? value : JSON.stringify(value);
-    this.prepare(
-      `INSERT INTO sev_session_state (sessionKey, stateKey, stateValue, updatedAt)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(sessionKey, stateKey) DO UPDATE SET
-       stateValue = excluded.stateValue,
-       updatedAt = excluded.updatedAt`
-    ).run(sessionKey, key, valStr, now);
+    await this.pool.withWriteLock((db) => {
+      this.prepare(
+        db,
+        `INSERT INTO sev_session_state (sessionKey, stateKey, stateValue, updatedAt)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(sessionKey, stateKey) DO UPDATE SET
+         stateValue = excluded.stateValue,
+         updatedAt = excluded.updatedAt`
+      ).run(sessionKey, key, valStr, now);
+    });
   }
 
   public getSessionState<T = any>(sessionKey: string, key: string): T | null {
+    const db = this.pool.acquireRead();
     const row = this.prepare(
+      db,
       `SELECT stateValue FROM sev_session_state WHERE sessionKey = ? AND stateKey = ?`
     ).get(sessionKey, key);
 
@@ -198,31 +223,36 @@ export class StrategicEvolutionStore {
     }
   }
 
-  public saveBashHistory(session: PersistentBashSession): void {
-    this.prepare(
-      `INSERT OR REPLACE INTO sev_bash_history (
-        id, command, scopeKey, sessionKey, startedAt, endedAt, cwd, status, exitCode, exitSignal, aggregated, tail, truncated, totalOutputChars
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      session.id,
-      session.command,
-      session.scopeKey ?? null,
-      session.sessionKey ?? null,
-      session.startedAt,
-      session.endedAt,
-      session.cwd ?? null,
-      session.status,
-      session.exitCode ?? null,
-      session.exitSignal !== undefined ? String(session.exitSignal) : null,
-      session.aggregated,
-      session.tail,
-      session.truncated ? 1 : 0,
-      session.totalOutputChars
-    );
+  public async saveBashHistory(session: PersistentBashSession): Promise<void> {
+    await this.pool.withWriteLock((db) => {
+      this.prepare(
+        db,
+        `INSERT OR REPLACE INTO sev_bash_history (
+          id, command, scopeKey, sessionKey, startedAt, endedAt, cwd, status, exitCode, exitSignal, aggregated, tail, truncated, totalOutputChars
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        session.id,
+        session.command,
+        session.scopeKey ?? null,
+        session.sessionKey ?? null,
+        session.startedAt,
+        session.endedAt,
+        session.cwd ?? null,
+        session.status,
+        session.exitCode ?? null,
+        session.exitSignal !== undefined ? String(session.exitSignal) : null,
+        session.aggregated,
+        session.tail,
+        session.truncated ? 1 : 0,
+        session.totalOutputChars
+      );
+    });
   }
 
   public getBashHistory(limit = 100): PersistentBashSession[] {
+    const db = this.pool.acquireRead();
     const rows = this.prepare(
+      db,
       `SELECT * FROM sev_bash_history ORDER BY endedAt DESC LIMIT ?`
     ).all(limit);
 
@@ -244,15 +274,17 @@ export class StrategicEvolutionStore {
     }));
   }
 
-  public pruneBashHistory(olderThanMs: number): void {
+  public async pruneBashHistory(olderThanMs: number): Promise<void> {
     const cutoff = Date.now() - olderThanMs;
-    this.prepare(`DELETE FROM sev_bash_history WHERE endedAt < ?`).run(cutoff);
+    await this.pool.withWriteLock((db) => {
+      this.prepare(db, `DELETE FROM sev_bash_history WHERE endedAt < ?`).run(cutoff);
+    });
   }
 }
 
 let _defaultStore: StrategicEvolutionStore | null = null;
 
-export function getStrategicEvolutionStore(dbPath?: string): StrategicEvolutionStore {
+export async function getStrategicEvolutionStore(dbPath?: string): Promise<StrategicEvolutionStore> {
   if (_defaultStore) return _defaultStore;
 
   const resolvedPath =
@@ -264,11 +296,9 @@ export function getStrategicEvolutionStore(dbPath?: string): StrategicEvolutionS
     );
 
   try {
-    fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
-    const sqlite = requireNodeSqlite();
-    const db = new sqlite.DatabaseSync(resolvedPath);
-    _defaultStore = new StrategicEvolutionStore(db);
-    log.info(`Strategic Evolution store opened at ${resolvedPath}`);
+    const pool = getGlobalSqlitePool(resolvedPath);
+    _defaultStore = await StrategicEvolutionStore.create(pool);
+    log.info(`Strategic Evolution store opened via pool at ${resolvedPath}`);
     return _defaultStore;
   } catch (err) {
     log.warn(
@@ -282,7 +312,7 @@ export function resetStrategicEvolutionStoreForTest(): void {
   const store = _defaultStore as any;
   if (store) {
     try {
-      store.db?.close?.();
+      store.pool?.close?.();
     } catch {}
     _defaultStore = null;
   }

@@ -20,9 +20,9 @@ describe("StrategicEvolutionStore", () => {
         }
     });
 
-    it("should record and retrieve metrics", () => {
+    it("should record and retrieve metrics", async () => {
         const sessionKey = "test-session";
-        store.recordMetric({
+        await store.recordMetric({
             sessionKey,
             type: "sentiment",
             value: 0.8,
@@ -35,23 +35,23 @@ describe("StrategicEvolutionStore", () => {
         expect(JSON.parse(metrics[0].metadata!)).toEqual({ info: "test" });
     });
 
-    it("should track recall hits", () => {
+    it("should track recall hits", async () => {
         const sessionKey = "test-session";
         const lineHash = "abc123hash";
 
-        store.recordRecallHit(sessionKey, lineHash);
-        store.recordRecallHit(sessionKey, lineHash);
+        await store.recordRecallHit(sessionKey, lineHash);
+        await store.recordRecallHit(sessionKey, lineHash);
 
         const hits = store.getRecallHits(sessionKey, lineHash);
         expect(hits).toBe(2);
     });
 
-    it("should calculate stats", () => {
+    it("should calculate stats", async () => {
         const sessionKey = "stats-session";
         
-        store.recordMetric({ sessionKey, type: "discovery", value: 10 });
-        store.recordMetric({ sessionKey, type: "discovery", value: 20 });
-        store.recordMetric({ sessionKey, type: "discovery", value: 30 });
+        await store.recordMetric({ sessionKey, type: "discovery", value: 10 });
+        await store.recordMetric({ sessionKey, type: "discovery", value: 20 });
+        await store.recordMetric({ sessionKey, type: "discovery", value: 30 });
 
         const stats = store.getStats({ sessionKey, type: "discovery" });
         expect(stats.count).toBe(3);
@@ -59,34 +59,34 @@ describe("StrategicEvolutionStore", () => {
         expect(stats.stdDev).toBeGreaterThan(0);
     });
 
-    it("should persist and retrieve session state", () => {
+    it("should persist and retrieve session state", async () => {
     const sessionKey = "test-session";
     const stateKey = "turn_count";
     const stateValue = 42;
 
-    store.setSessionState(sessionKey, stateKey, stateValue);
+    await store.setSessionState(sessionKey, stateKey, stateValue);
     const retrieved = store.getSessionState<number>(sessionKey, stateKey);
 
     expect(retrieved).toBe(stateValue);
   });
 
-  it("should handle complex objects in session state", () => {
+  it("should handle complex objects in session state", async () => {
     const sessionKey = "test-session";
     const stateKey = "perf";
     const stateValue = { latencies: [100, 200], mutationActive: true };
 
-    store.setSessionState(sessionKey, stateKey, stateValue);
+    await store.setSessionState(sessionKey, stateKey, stateValue);
     const retrieved = store.getSessionState<typeof stateValue>(sessionKey, stateKey);
 
     expect(retrieved).toEqual(stateValue);
   });
 
-  it("should update existing session state on conflict", () => {
+  it("should update existing session state on conflict", async () => {
     const sessionKey = "test-session";
     const stateKey = "status";
 
-    store.setSessionState(sessionKey, stateKey, "initial");
-    store.setSessionState(sessionKey, stateKey, "updated");
+    await store.setSessionState(sessionKey, stateKey, "initial");
+    await store.setSessionState(sessionKey, stateKey, "updated");
 
     const retrieved = store.getSessionState<string>(sessionKey, stateKey);
     expect(retrieved).toBe("updated");

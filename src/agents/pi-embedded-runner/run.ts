@@ -1167,7 +1167,7 @@ export async function runEmbeddedPiAgent(
               thinkLevel = fallbackThinking;
               continue;
             }
-            // FIX: Throw FailoverError for prompt errors when fallbacks configured
+            // Throw FailoverError for prompt errors when fallbacks configured
             // This enables model fallback for quota/rate limit errors during prompt submission
             if (fallbackConfigured && isFailoverErrorMessage(errorText)) {
               throw new FailoverError(errorText, {

@@ -37,11 +37,17 @@ export type SkillsLimitsConfig = {
   maxSkillFileBytes?: number;
 };
 
+export type SkillsQuarantineConfig = {
+  /** Secret key used for cryptographic signing of verified skills. */
+  secretKey?: SecretInput;
+};
+
 export type SkillsConfig = {
   /** Optional bundled-skill allowlist (only affects bundled skills). */
   allowBundled?: string[];
   load?: SkillsLoadConfig;
   install?: SkillsInstallConfig;
   limits?: SkillsLimitsConfig;
+  quarantine?: SkillsQuarantineConfig;
   entries?: Record<string, SkillConfig>;
 };

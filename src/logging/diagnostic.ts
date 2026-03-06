@@ -432,7 +432,7 @@ export function resetDiagnosticStateForTest(): void {
   stopDiagnosticHeartbeat();
 }
 
-export function logStrategicMetric(params: {
+export async function logStrategicMetric(params: {
   sessionKey?: string;
   metricType: "sentiment" | "discovery" | "surprise";
   value: number;
@@ -444,7 +444,7 @@ export function logStrategicMetric(params: {
   if (params.sessionKey) {
     try {
       const store = getStrategicEvolutionStore();
-      store.recordMetric({
+      await store.recordMetric({
         sessionKey: params.sessionKey,
         type: params.metricType,
         value: params.value,

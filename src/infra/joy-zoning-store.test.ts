@@ -9,8 +9,8 @@ describe("JoyZoningStore", () => {
   });
 
   describe("violations", () => {
-    it("records and retrieves violations", () => {
-      const id = store.recordViolation({
+    it("records and retrieves violations", async () => {
+      const id = await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/config/config.ts",
         layer: "Domain",
@@ -27,15 +27,15 @@ describe("JoyZoningStore", () => {
       expect(violations[0].correctionHint).toBe("Use dependency inversion");
     });
 
-    it("returns both violations for a session", () => {
-      store.recordViolation({
+    it("returns both violations for a session", async () => {
+      await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/config/a.ts",
         layer: "Domain",
         level: "block",
         message: "first",
       });
-      store.recordViolation({
+      await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/config/b.ts",
         layer: "Domain",
@@ -50,22 +50,22 @@ describe("JoyZoningStore", () => {
       expect(messages).toContain("second");
     });
 
-    it("retrieves violations by file path", () => {
-      store.recordViolation({
+    it("retrieves violations by file path", async () => {
+      await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/config/config.ts",
         layer: "Domain",
         level: "block",
         message: "violation A",
       });
-      store.recordViolation({
+      await store.recordViolation({
         sessionKey: "s2",
         filePath: "src/config/config.ts",
         layer: "Domain",
         level: "warning",
         message: "violation B",
       });
-      store.recordViolation({
+      await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/agents/other.ts",
         layer: "Core",
@@ -77,9 +77,9 @@ describe("JoyZoningStore", () => {
       expect(fileViolations).toHaveLength(2);
     });
 
-    it("respects limit parameter", () => {
+    it("respects limit parameter", async () => {
       for (let i = 0; i < 5; i++) {
-        store.recordViolation({
+        await store.recordViolation({
           sessionKey: "s1",
           filePath: `src/config/${i}.ts`,
           layer: "Domain",
@@ -92,26 +92,26 @@ describe("JoyZoningStore", () => {
   });
 
   describe("strikes", () => {
-    it("increments strike count", () => {
-      expect(store.getOrIncrementStrike("src/config/config.ts")).toBe(1);
-      expect(store.getOrIncrementStrike("src/config/config.ts")).toBe(2);
-      expect(store.getOrIncrementStrike("src/config/config.ts")).toBe(3);
+    it("increments strike count", async () => {
+      expect(await store.getOrIncrementStrike("src/config/config.ts")).toBe(1);
+      expect(await store.getOrIncrementStrike("src/config/config.ts")).toBe(2);
+      expect(await store.getOrIncrementStrike("src/config/config.ts")).toBe(3);
       expect(store.getStrikeCount("src/config/config.ts")).toBe(3);
     });
 
-    it("tracks independent files separately", () => {
-      store.getOrIncrementStrike("src/config/a.ts");
-      store.getOrIncrementStrike("src/config/a.ts");
-      store.getOrIncrementStrike("src/config/b.ts");
+    it("tracks independent files separately", async () => {
+      await store.getOrIncrementStrike("src/config/a.ts");
+      await store.getOrIncrementStrike("src/config/a.ts");
+      await store.getOrIncrementStrike("src/config/b.ts");
 
       expect(store.getStrikeCount("src/config/a.ts")).toBe(2);
       expect(store.getStrikeCount("src/config/b.ts")).toBe(1);
     });
 
-    it("resets a strike", () => {
-      store.getOrIncrementStrike("src/config/config.ts");
-      store.getOrIncrementStrike("src/config/config.ts");
-      store.resetStrike("src/config/config.ts");
+    it("resets a strike", async () => {
+      await store.getOrIncrementStrike("src/config/config.ts");
+      await store.getOrIncrementStrike("src/config/config.ts");
+      await store.resetStrike("src/config/config.ts");
       expect(store.getStrikeCount("src/config/config.ts")).toBe(0);
     });
 
@@ -119,9 +119,9 @@ describe("JoyZoningStore", () => {
       expect(store.getStrikeCount("nonexistent.ts")).toBe(0);
     });
 
-    it("returns top strikers", () => {
-      for (let i = 0; i < 3; i++) store.getOrIncrementStrike("src/config/many.ts");
-      store.getOrIncrementStrike("src/config/one.ts");
+    it("returns top strikers", async () => {
+      for (let i = 0; i < 3; i++) await store.getOrIncrementStrike("src/config/many.ts");
+      await store.getOrIncrementStrike("src/config/one.ts");
 
       const top = store.getTopStrikes(5);
       expect(top).toHaveLength(2);
@@ -131,22 +131,22 @@ describe("JoyZoningStore", () => {
   });
 
   describe("sessions", () => {
-    it("tracks session stats from violations", () => {
-      store.recordViolation({
+    it("tracks session stats from violations", async () => {
+      await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/config/a.ts",
         layer: "Domain",
         level: "warning",
         message: "w1",
       });
-      store.recordViolation({
+      await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/config/b.ts",
         layer: "Domain",
         level: "block",
         message: "b1",
       });
-      store.recordViolation({
+      await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/config/c.ts",
         layer: "Domain",
@@ -166,22 +166,22 @@ describe("JoyZoningStore", () => {
   });
 
   describe("health summary", () => {
-    it("aggregates across sessions", () => {
-      store.recordViolation({
+    it("aggregates across sessions", async () => {
+      await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/config/a.ts",
         layer: "Domain",
         level: "warning",
         message: "w1",
       });
-      store.recordViolation({
+      await store.recordViolation({
         sessionKey: "s2",
         filePath: "src/config/b.ts",
         layer: "Domain",
         level: "block",
         message: "b1",
       });
-      store.getOrIncrementStrike("src/config/a.ts");
+      await store.getOrIncrementStrike("src/config/a.ts");
 
       const health = store.getHealthSummary();
       expect(health.totalViolations).toBe(2);
@@ -192,9 +192,9 @@ describe("JoyZoningStore", () => {
   });
 
   describe("maintenance", () => {
-    it("prunes old violations", () => {
+    it("prunes old violations", async () => {
       for (let i = 0; i < 10; i++) {
-        store.recordViolation({
+        await store.recordViolation({
           sessionKey: "s1",
           filePath: `src/config/${i}.ts`,
           layer: "Domain",
@@ -202,21 +202,21 @@ describe("JoyZoningStore", () => {
           message: `violation ${i}`,
         });
       }
-      const pruned = store.pruneViolations(5);
+      const pruned = await store.pruneViolations(5);
       expect(pruned).toBe(5);
       expect(store.getRecentViolations("s1", 20)).toHaveLength(5);
     });
 
-    it("clears all data", () => {
-      store.recordViolation({
+    it("clears all data", async () => {
+      await store.recordViolation({
         sessionKey: "s1",
         filePath: "src/config/a.ts",
         layer: "Domain",
         level: "warning",
         message: "w1",
       });
-      store.getOrIncrementStrike("src/config/a.ts");
-      store.clear();
+      await store.getOrIncrementStrike("src/config/a.ts");
+      await store.clear();
 
       expect(store.getRecentViolations("s1")).toHaveLength(0);
       expect(store.getStrikeCount("src/config/a.ts")).toBe(0);
