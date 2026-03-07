@@ -258,6 +258,11 @@ export function wrapToolWithBeforeToolCallHook(
         ctx,
       });
       if (outcome.blocked) {
+        // Use a more specific error type if it looks like an architectural correction
+        if (outcome.reason.includes("ARCHITECTURAL CORRECTION REQUIRED")) {
+          const { ToolInputError } = await import("./tools/common.js");
+          throw new ToolInputError(outcome.reason);
+        }
         throw new Error(outcome.reason);
       }
       if (toolCallId) {

@@ -97,6 +97,7 @@ export type JoyZoningViolation = {
   targetLayer?: JoyZoningLayer;
   correctionHint?: string;
   violations?: string[];
+  error_retry?: boolean;
 };
 
 export type JoyZoningPolicyState = {
@@ -431,17 +432,28 @@ function resolveContentViolation(params: {
   thoughtSnippet?: string;
 }): JoyZoningViolation {
   const { errors, filePath, sourceLayer, sessionKey, agentId, thoughtSnippet } = params;
+  const fatalErrors = errors.filter((e) => !e.includes("⚠️ DISCERNMENT WARNING"));
+  const isDiscernmentOnly = fatalErrors.length === 0 && errors.length > 0;
+
   const hint = getCorrectionHint(errors);
   const violationSummary = errors.map((e) => `  - ${e}`).join("\n");
 
-  if (!sessionKey) {
-    return {
-      level: applyStrictness(sourceLayer === "Domain" ? "block" : "warning"),
-      message: `${sourceLayer} layer file has ${errors.length} violation(s):\n${violationSummary}\n\n${hint}`,
+  if (!sessionKey || isDiscernmentOnly) {
+    const level = isDiscernmentOnly
+      ? "warning"
+      : applyStrictness(sourceLayer === "Domain" ? "block" : "warning");
+
+    const violation: JoyZoningViolation = {
+      level,
+      message: `${isDiscernmentOnly ? "⚠️ DISCERNMENT WARNING" : sourceLayer + " layer file"} has ${errors.length} violation(s):\n${violationSummary}\n\n${hint}`,
       sourceLayer,
       correctionHint: hint,
       violations: errors,
     };
+    if (sessionKey) {
+      trackViolation(getOrCreatePolicyState(sessionKey), violation, sessionKey, filePath, agentId, thoughtSnippet);
+    }
+    return violation;
   }
 
   const state = getOrCreatePolicyState(sessionKey);
@@ -452,21 +464,38 @@ function resolveContentViolation(params: {
 
   // 1. DOMAIN: Zero tolerance — Block on first strike
   if (sourceLayer === "Domain") {
-    const effectiveLevel = applyStrictness("block");
-    if (effectiveLevel === "block") state.blockCount++;
-    else state.warningCount++;
-    
-    const violation: JoyZoningViolation = {
-      level: effectiveLevel,
-      message: `🛑 DOMAIN ARCHITECTURAL REJECTION: ${errors.length} violation(s):\n${violationSummary}\n\n${hint}\n\n💡 Architecture Rule: Domain must be pure logic. Use Infrastructure for side effects.`,
-      sourceLayer,
-      correctionHint: hint,
-      violations: errors,
-    };
-    trackViolation(state, violation, sessionKey, filePath, agentId, thoughtSnippet);
-    log.warn(`Joy-Zoning BLOCK [${sessionKey}]: Domain violation on ${filePath}`);
-    persistStrike(filePath, violation.message);
-    return violation;
+    if (strikes === 1) {
+      const effectiveLevel = applyStrictness("block");
+      if (effectiveLevel === "block") state.blockCount++;
+      else state.warningCount++;
+
+      const violation: JoyZoningViolation = {
+        level: effectiveLevel,
+        message: `🛑 DOMAIN ARCHITECTURAL REJECTION: [🏗️ ARCHITECTURAL CORRECTION REQUIRED] ${errors.length} violation(s):\n${violationSummary}\n\n${hint}\n\n💡 Architecture Rule: Domain must be pure logic. Use Infrastructure for side effects.`,
+        sourceLayer,
+        correctionHint: hint,
+        violations: errors,
+        error_retry: true,
+      };
+      trackViolation(state, violation, sessionKey, filePath, agentId, thoughtSnippet);
+      log.warn(`Joy-Zoning BLOCK [${sessionKey}]: Domain violation on ${filePath}`);
+      persistStrike(filePath, violation.message);
+      return violation;
+    } else {
+      // Strike 2+: Degrade to warning
+      state.warningCount++;
+      const violation: JoyZoningViolation = {
+        level: "warning",
+        message: `⚠️ [Architectural Warning] (Strike ${strikes}) Domain layer file has ${errors.length} violation(s):\n${violationSummary}\n\n${hint}\n\nProceeding with warning to prevent deadlock. Please refactor this file soon.`,
+        sourceLayer,
+        correctionHint: hint,
+        violations: errors,
+      };
+      trackViolation(state, violation, sessionKey, filePath, agentId, thoughtSnippet);
+      log.info(`Joy-Zoning WARNING (Strike ${strikes}) [${sessionKey}]: Domain violation on ${filePath}`);
+      persistStrike(filePath, violation.message);
+      return violation;
+    }
   }
 
   // 2. CORE / INFRASTRUCTURE: Progressive — Warn 3 times, then Block
@@ -545,12 +574,26 @@ function resolvePathViolation(params: {
       else state.warningCount++;
       const violation: JoyZoningViolation = {
         level: effectiveLevel,
-        message: `🛑 DOMAIN DEPENDENCY VIOLATION: ${message}`,
+        message: `🛑 DOMAIN DEPENDENCY VIOLATION: [🏗️ ARCHITECTURAL CORRECTION REQUIRED] ${message}`,
+        sourceLayer,
+        targetLayer,
+        error_retry: true,
+      };
+      trackViolation(state, violation, sessionKey, filePath, agentId, thoughtSnippet);
+      log.warn(`Joy-Zoning BLOCK [${sessionKey}]: ${message}`);
+      persistStrike(filePath, message);
+      return violation;
+    } else {
+      // Strike 2+: Degrade to warning
+      state.warningCount++;
+      const violation: JoyZoningViolation = {
+        level: "warning",
+        message: `⚠️ [Architectural Warning] (Strike ${strikes}) Domain dependency violation: ${message}\nProceeding with warning to prevent deadlock.`,
         sourceLayer,
         targetLayer,
       };
       trackViolation(state, violation, sessionKey, filePath, agentId, thoughtSnippet);
-      log.warn(`Joy-Zoning BLOCK [${sessionKey}]: ${message}`);
+      log.info(`Joy-Zoning WARNING (Strike ${strikes}) [${sessionKey}]: ${message}`);
       persistStrike(filePath, message);
       return violation;
     }

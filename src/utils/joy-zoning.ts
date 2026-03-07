@@ -148,7 +148,7 @@ export function validateSmells(filePath: string, content: string): string[] {
   // Forbidden 'any' type — Domain and Infrastructure only
   if (layer === "Domain" || layer === "Infrastructure") {
     if (codeOnly.includes(": any") || codeOnly.includes("<any>")) {
-      errors.push(`${basename}: 'any' type detected — use a typed interface or generic.`);
+      errors.push(`⚠️ DISCERNMENT WARNING: ${basename}: 'any' type detected — use a typed interface or generic.`);
     }
   }
 

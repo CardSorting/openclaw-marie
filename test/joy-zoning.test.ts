@@ -1,7 +1,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { validateJoyZoning, detectCrossLayerImports } from "../src/utils/joy-zoning.js";
-import { evaluateToolCall, setStoreForTest } from "../src/agents/joy-zoning.policy.ts";
+import { evaluateToolCall, setStoreForTest, type JoyZoningViolation } from "../src/agents/joy-zoning.policy.ts";
 import { createInMemoryStore } from "../src/infra/joy-zoning-store.js";
 
 describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
@@ -38,16 +38,16 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
       expect(cycle).toEqual(["src/domain/a.ts", "src/domain/a.ts"]);
     });
 
-    it("should detect complex 3-file cycles (A -> B -> C -> A)", () => {
-      store.recordDependency("src/domain/a.ts", "src/domain/b.ts");
-      store.recordDependency("src/domain/b.ts", "src/domain/c.ts");
+    it("should detect complex 3-file cycles (A -> B -> C -> A)", async () => {
+      await store.recordDependency("src/domain/a.ts", "src/domain/b.ts");
+      await store.recordDependency("src/domain/b.ts", "src/domain/c.ts");
       
       const cycle = store.detectCycle("src/domain/c.ts", "src/domain/a.ts");
       expect(cycle).toEqual(["src/domain/c.ts", "src/domain/a.ts", "src/domain/b.ts", "src/domain/c.ts"]);
     });
 
-    it("should block tool calls that create cycles", () => {
-      store.recordDependency("src/domain/a.ts", "src/domain/b.ts");
+    it("should block tool calls that create cycles", async () => {
+      await store.recordDependency("src/domain/a.ts", "src/domain/b.ts");
       
       const res = evaluateToolCall({
         toolName: "edit",
@@ -62,7 +62,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
   });
 
   describe("Enriched attribution", () => {
-    it("should store agentId and thought snippets in violations", () => {
+    it("should store agentId and thought snippets in violations", async () => {
       evaluateToolCall({
         toolName: "edit",
         filePath: "src/domain/logic.ts",
@@ -71,6 +71,9 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         agentId: "agent-007",
         thought: "I need this db connection directly for speed."
       });
+
+      // Allow for async persistence
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       const violations = store.getRecentViolations("attr-test");
       expect(violations[0].agentId).toBe("agent-007");
@@ -231,10 +234,10 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
     });
 
     describe("Architectural Quarantine", () => {
-      it("should block imports into CORE if target has > 10 strikes", () => {
+      it("should block imports into CORE if target has > 10 strikes", async () => {
         const infraPath = "src/infra/leaky-adapter.ts";
         for (let i = 0; i < 11; i++) {
-          store.getOrIncrementStrike(infraPath, "Leaking state");
+          await store.getOrIncrementStrike(infraPath, "Leaking state");
         }
         
         const res = evaluateToolCall({
@@ -252,12 +255,12 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
     describe("High-Concurrency Persistence (Busy-Retry)", () => {
       it("should survive 50 rapid-fire concurrent violations without SQLITE_BUSY failure", async () => {
         const tasks = Array.from({ length: 50 }).map((_, i) => {
-          return new Promise((resolve) => {
+          return new Promise<JoyZoningViolation | null>((resolve) => {
             setTimeout(() => {
                const res = evaluateToolCall({
                   toolName: "edit",
                   filePath: `src/domain/file-${i}.ts`,
-                  content: ": any",
+                  content: ": any", // DISCERNMENT WARNING (now a warning)
                   sessionKey: "concurrency-session",
                   agentId: `agent-${i}`
                });
@@ -268,10 +271,60 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
 
         const results = await Promise.all(tasks);
         expect(results.every(r => r !== null)).toBe(true);
+        expect(results.every(r => r?.level === "warning")).toBe(true);
         
+        // Wait for persistence
+        await new Promise(resolve => setTimeout(resolve, 200));
+
         const summary = store.getSessionSummary("concurrency-session");
-        expect(summary.blockCount).toBe(50);
+        expect(summary?.warningCount).toBe(50);
       }, 10000);
+    });
+
+    describe("Strike 2+ Degradation (Progressive Enforcement)", () => {
+      it("should block Domain violation on Strike 1 and warn on Strike 2+", async () => {
+        const filePath = "src/domain/logic.ts";
+        const sessionKey = "strike-test";
+
+        // Strike 1: Block
+        const res1 = evaluateToolCall({
+          toolName: "edit",
+          filePath,
+          content: "import { db } from '../infra/db';",
+          sessionKey
+        });
+        expect(res1?.level).toBe("block");
+        expect(res1?.error_retry).toBe(true);
+        expect(res1?.message).toContain("ARCHITECTURAL CORRECTION REQUIRED");
+
+        // Strike 2: Warning
+        const res2 = evaluateToolCall({
+          toolName: "edit",
+          filePath,
+          content: "import { db } from '../infra/db';",
+          sessionKey
+        });
+        expect(res2?.level).toBe("warning");
+        expect(res2?.message).toContain("Architectural Warning");
+        expect(res2?.message).toContain("(Strike 2)");
+
+        // Verify summary
+        await new Promise(resolve => setTimeout(resolve, 50));
+        const summary = store.getSessionSummary(sessionKey);
+        expect(summary?.blockCount).toBe(1);
+        expect(summary?.warningCount).toBe(1);
+      });
+
+      it("should treat ': any' as a non-blocking warning even on Strike 1", async () => {
+        const res = evaluateToolCall({
+          toolName: "edit",
+          filePath: "src/domain/any-logic.ts",
+          content: "const x: any = 1;",
+          sessionKey: "any-test"
+        });
+        expect(res?.level).toBe("warning");
+        expect(res?.message).toContain("DISCERNMENT WARNING");
+      });
     });
   });
 });
