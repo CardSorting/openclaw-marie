@@ -1,4 +1,4 @@
-import { resolveDefaultAgentId } from "../agents/agent-scope.js";
+import { resolveAgentConfig, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import type { ChatType } from "../channels/chat-type.js";
 import { normalizeChatType } from "../channels/chat-type.js";
 import type { OpenClawConfig } from "../config/config.js";
@@ -595,6 +595,42 @@ function matchesBindingScope(match: NormalizedBindingMatch, scope: BindingScope)
   return true;
 }
 
+function isHighRiskAgent(cfg: OpenClawConfig, agentId: string): boolean {
+  const config = resolveAgentConfig(cfg, agentId);
+  if (!config) {
+    return false;
+  }
+
+  // Check profile - some profiles are inherently high-risk/full-trust
+  const profile = config.tools?.profile ?? cfg.tools?.profile;
+  if (profile === "full" || profile === "coding") {
+    return true;
+  }
+
+  // Check explicit tools or tool groups
+  const allow = new Set((config.tools?.allow ?? []).map((t) => String(t).toLowerCase()));
+  if (
+    allow.has("exec") ||
+    allow.has("process") ||
+    allow.has("browser") ||
+    allow.has("terminal") ||
+    allow.has("group:runtime")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function hasMultipleAccountsForChannel(cfg: OpenClawConfig, channel: string): boolean {
+  const channelCfg = (cfg.channels as Record<string, unknown> | undefined)?.[channel];
+  if (!channelCfg || typeof channelCfg !== "object") {
+    return false;
+  }
+  const accounts = (channelCfg as Record<string, unknown>).accounts;
+  return Boolean(accounts && typeof accounts === "object" && Object.keys(accounts).length > 1);
+}
+
 export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentRoute {
   const channel = normalizeToken(input.channel);
   const accountId = normalizeAccountId(input.accountId);
@@ -608,7 +644,7 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
   const teamId = normalizeId(input.teamId);
   const memberRoleIds = input.memberRoleIds ?? [];
   const memberRoleIdSet = new Set(memberRoleIds);
-  const dmScope = input.cfg.session?.dmScope ?? "main";
+  const dmScope = input.cfg.session?.dmScope ?? "per-channel-peer";
   const identityLinks = input.cfg.session?.identityLinks;
   const shouldLogDebug = shouldLogVerbose();
   const parentPeer = input.parentPeer
@@ -644,12 +680,28 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
 
   const choose = (agentId: string, matchedBy: ResolvedAgentRoute["matchedBy"]) => {
     const resolvedAgentId = pickFirstExistingAgentId(input.cfg, agentId);
+
+    // Proactive Hardening: Elevate dmScope if agent is high-risk or channel has multiple accounts
+    let effectiveDmScope = dmScope;
+    if (effectiveDmScope === "main") {
+      if (isHighRiskAgent(input.cfg, resolvedAgentId)) {
+        effectiveDmScope = "per-channel-peer";
+      }
+    }
+
+    // Proactive Hardening (Multi-account): Recommend/Force account isolation if multiple accounts exist
+    if (effectiveDmScope === "per-channel-peer" || effectiveDmScope === "main") {
+      if (hasMultipleAccountsForChannel(input.cfg, channel)) {
+        effectiveDmScope = "per-account-channel-peer";
+      }
+    }
+
     const sessionKey = buildAgentSessionKey({
       agentId: resolvedAgentId,
       channel,
       accountId,
       peer,
-      dmScope,
+      dmScope: effectiveDmScope,
       identityLinks,
     }).toLowerCase();
     const mainSessionKey = buildAgentMainSessionKey({

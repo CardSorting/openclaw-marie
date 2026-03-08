@@ -425,7 +425,7 @@ export async function authorizeGatewayConnect(
       tailscaleWhois,
     });
     if (tailscaleCheck.ok) {
-      limiter?.reset(ip, rateLimitScope);
+      await limiter?.reset(ip, rateLimitScope);
       return {
         ok: true,
         method: "tailscale",
@@ -439,14 +439,14 @@ export async function authorizeGatewayConnect(
       return { ok: false, reason: "token_missing_config" };
     }
     if (!connectAuth?.token) {
-      limiter?.recordFailure(ip, rateLimitScope);
+      await limiter?.recordFailure(ip, rateLimitScope);
       return { ok: false, reason: "token_missing" };
     }
     if (!safeEqualSecret(connectAuth.token, auth.token)) {
-      limiter?.recordFailure(ip, rateLimitScope);
+      await limiter?.recordFailure(ip, rateLimitScope);
       return { ok: false, reason: "token_mismatch" };
     }
-    limiter?.reset(ip, rateLimitScope);
+    await limiter?.reset(ip, rateLimitScope);
     return { ok: true, method: "token" };
   }
 
@@ -456,18 +456,18 @@ export async function authorizeGatewayConnect(
       return { ok: false, reason: "password_missing_config" };
     }
     if (!password) {
-      limiter?.recordFailure(ip, rateLimitScope);
+      await limiter?.recordFailure(ip, rateLimitScope);
       return { ok: false, reason: "password_missing" };
     }
     if (!safeEqualSecret(password, auth.password)) {
-      limiter?.recordFailure(ip, rateLimitScope);
+      await limiter?.recordFailure(ip, rateLimitScope);
       return { ok: false, reason: "password_mismatch" };
     }
-    limiter?.reset(ip, rateLimitScope);
+    await limiter?.reset(ip, rateLimitScope);
     return { ok: true, method: "password" };
   }
 
-  limiter?.recordFailure(ip, rateLimitScope);
+  await limiter?.recordFailure(ip, rateLimitScope);
   return { ok: false, reason: "unauthorized" };
 }
 

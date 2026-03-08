@@ -111,7 +111,7 @@ export function formatCliBannerArt(options: BannerOptions = {}): string {
     return MARIE_ASCII.join("\n");
   }
 
-  const colorChar = (ch: string) => {
+  const _colorChar = (ch: string) => {
     if (ch === "█") {
       return theme.accentBright(ch);
     }
@@ -130,7 +130,7 @@ export function formatCliBannerArt(options: BannerOptions = {}): string {
         if (ch === "🌸") {
           return theme.accentBright(ch);
         }
-        if (ch === "_" || ch === "|" || ch === "/" || ch === "\\" ) {
+        if (ch === "_" || ch === "|" || ch === "/" || ch === "\\") {
           return theme.accent(ch);
         }
         if (ch === "." || ch === ":") {

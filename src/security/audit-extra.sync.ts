@@ -1347,3 +1347,54 @@ export function collectLikelyMultiUserSetupFindings(cfg: OpenClawConfig): Securi
 
   return findings;
 }
+
+export function collectSessionIsolationFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+  const findings: SecurityAuditFinding[] = [];
+  const signals = listPotentialMultiUserSignals(cfg);
+  const isMultiUser = signals.length > 0;
+  const globalDmScope = cfg.session?.dmScope ?? "per-channel-peer";
+
+  // 1. Sensitive Tool Isolation Check
+  const { riskyContexts, hasRuntimeRisk } = collectRiskyToolExposureContexts(cfg);
+  if (globalDmScope === "main" && (hasRuntimeRisk || riskyContexts.length > 0)) {
+    findings.push({
+      checkId: "session.isolation.risky_tools_broad_scope",
+      severity: isMultiUser ? "critical" : "warn",
+      title: "Sensitive tools exposed with broad session scope",
+      detail:
+        `session.dmScope is set to "main", but agents with sensitive tools (exec/process/fs) were detected:\n` +
+        riskyContexts.map((c) => `- ${c}`).join("\n") +
+        "\nPrompt injection in any session can access these tools across all DM contexts.",
+      remediation:
+        'Set `session.dmScope: "per-channel-peer"` (or tighter) to isolate these tools by default.',
+    });
+  }
+
+  // 2. Multi-Account Channel Check
+  const channels = cfg.channels as Record<string, unknown> | undefined;
+  if (channels) {
+    for (const [channelId, channel] of Object.entries(channels)) {
+      if (!channel || typeof channel !== "object") {
+        continue;
+      }
+      const channelData = channel as Record<string, unknown>;
+      const accounts = channelData.accounts as Record<string, unknown> | undefined;
+      if (accounts && typeof accounts === "object" && Object.keys(accounts).length > 1) {
+        if (globalDmScope !== "per-account-channel-peer") {
+          findings.push({
+            checkId: "session.isolation.multi_account_leakage",
+            severity: "warn",
+            title: `Potential cross-account leakage on channel "${channelId}"`,
+            detail:
+              `Channel "${channelId}" has multiple accounts configured, but session.dmScope is "${globalDmScope}". ` +
+              "DMs from the same peer across different accounts might share the same session.",
+            remediation:
+              'Set `session.dmScope: "per-account-channel-peer"` for maximum isolation in multi-account setups.',
+          });
+        }
+      }
+    }
+  }
+
+  return findings;
+}

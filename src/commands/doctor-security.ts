@@ -176,11 +176,10 @@ export async function noteSecurityWarnings(cfg: OpenClawConfig) {
       warnings.push(`  ${params.approveHint}`);
     }
 
-    if (dmScope === "main" && isMultiUserDm) {
+    if ((dmScope === "main" || !dmScope) && isMultiUserDm) {
       warnings.push(
-        `- ${params.label} DMs: multiple senders share the main session; run: ` +
-          formatCliCommand('openclaw config set session.dmScope "per-channel-peer"') +
-          ' (or "per-account-channel-peer" for multi-account channels) to isolate sessions.',
+        `- Recommended baseline: isolate DM sessions (${params.label} DMs share the main session).`,
+        `  Fix: ${formatCliCommand('marie config set session.dmScope "per-channel-peer"')} (or "per-account-channel-peer" for multi-account channels).`,
       );
     }
   };

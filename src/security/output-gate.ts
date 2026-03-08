@@ -1,8 +1,8 @@
+import { getJoyZoningStore } from "../infra/joy-zoning-store.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { redactPII } from "./redaction.js";
 import { detectHoneyPotLeak } from "./honey-pots.js";
 import { emitForensicEvent } from "./quarantine-shadow.js";
-import { getJoyZoningStore } from "../infra/joy-zoning-store.js";
+import { redactPII } from "./redaction.js";
 
 const log = createSubsystemLogger("security/output-gate");
 
@@ -19,7 +19,7 @@ export interface OutputValidationResult {
  */
 export async function validateAndSanitizeOutput(
   content: string,
-  options?: { sessionKey?: string },
+  _options?: { sessionKey?: string },
 ): Promise<OutputValidationResult> {
   // 1. Honey-pot check (Critical failure)
   const leak = detectHoneyPotLeak(content);

@@ -1,9 +1,8 @@
-import fs from "node:fs/promises";
-import fsSync from "node:fs";
-import path from "node:path";
-import { getQuarantinePath } from "../security/quarantine-shadow.js";
 import { createHash } from "node:crypto";
-import { createSubsystemLogger } from "../logging/subsystem.js";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { createSubsystemLogger } from "../logging/subsystem.js"; // Restored this import as it's used by `log`
+import { getQuarantinePath } from "../security/quarantine-shadow.js";
 
 const log = createSubsystemLogger("agents/marie-memory");
 
@@ -58,12 +57,6 @@ export interface MarieMemoryState {
 
 function hashContent(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
-}
-
-function ensureDirSync(dir: string): void {
-  if (!fsSync.existsSync(dir)) {
-    fsSync.mkdirSync(dir, { recursive: true });
-  }
 }
 
 async function ensureDir(dir: string): Promise<void> {
@@ -124,11 +117,21 @@ import { logStrategicMetric } from "../logging/diagnostic.js";
 import { validateMemoryWrite } from "../security/memory-write-gate.js";
 
 function calculateDiscovery(oldContent: string, newContent: string): number {
-  const oldLines = new Set(oldContent.split("\n").map(l => l.trim()).filter(Boolean));
-  const newLines = newContent.split("\n").map(l => l.trim()).filter(Boolean);
+  const oldLines = new Set(
+    oldContent
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean),
+  );
+  const newLines = newContent
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
   let newlyAdded = 0;
   for (const line of newLines) {
-    if (!oldLines.has(line)) newlyAdded++;
+    if (!oldLines.has(line)) {
+      newlyAdded++;
+    }
   }
   return newlyAdded;
 }
@@ -145,10 +148,7 @@ function calculateDiscovery(oldContent: string, newContent: string): number {
  * Rejects writes that exceed MEMORY_CHAR_CAP or contain injection threats.
  * Never silently truncates — always returns an explicit error.
  */
-export async function writeMemory(
-  agentDir: string,
-  content: string,
-): Promise<MemoryWriteResult> {
+export async function writeMemory(agentDir: string, content: string): Promise<MemoryWriteResult> {
   const charCount = content.length;
   const validation = await validateMemoryWrite(content, "memory");
 
@@ -169,10 +169,10 @@ export async function writeMemory(
   log.info(`MEMORY.md written: ${charCount}/${MEMORY_CHAR_CAP} chars (discovery=${discovery})`);
 
   if (discovery > 0) {
-    logStrategicMetric({
-        metricType: "discovery",
-        value: discovery,
-        message: `Added ${discovery} new facts to MEMORY.md`,
+    void logStrategicMetric({
+      metricType: "discovery",
+      value: discovery,
+      message: `Added ${discovery} new facts to MEMORY.md`,
     });
   }
 
@@ -217,13 +217,8 @@ export async function writeUserModel(
  * Writes timestamped immutable copies to `snapshots/` directory.
  * Cache-stable: never live-watched, only written on explicit nudge/flush cycles.
  */
-export async function createFrozenSnapshot(
-  agentDir: string,
-): Promise<FrozenSnapshot> {
-  const [memory, userModel] = await Promise.all([
-    readMemory(agentDir),
-    readUserModel(agentDir),
-  ]);
+export async function createFrozenSnapshot(agentDir: string): Promise<FrozenSnapshot> {
+  const [memory, userModel] = await Promise.all([readMemory(agentDir), readUserModel(agentDir)]);
 
   const timestamp = new Date().toISOString();
   const combined = `# MEMORY.md\n${memory}\n\n# USER.md\n${userModel}`;
@@ -249,20 +244,19 @@ export async function createFrozenSnapshot(
 /**
  * Get the timestamp of the last frozen snapshot, or null if none exist.
  */
-export async function getLastSnapshotTimestamp(
-  agentDir: string,
-): Promise<string | null> {
+export async function getLastSnapshotTimestamp(agentDir: string): Promise<string | null> {
   const dir = snapshotDir(agentDir);
   try {
     const entries = await fs.readdir(dir);
-    const snapshots = entries.filter((e) => e.endsWith(".md")).sort();
-    if (snapshots.length === 0) return null;
+    const snapshots = entries.filter((e) => e.endsWith(".md")).toSorted();
+    if (snapshots.length === 0) {
+      return null;
+    }
     // Extract timestamp from filename pattern: YYYY-MM-DDTHH-MM-SS-sssZ_hash.md
-    const last = snapshots[snapshots.length - 1]!;
-    const tsPart = last.split("_")[0]!;
+    const last = snapshots[snapshots.length - 1];
+    const tsPart = last.split("_")[0];
     // Restore the original ISO format
-    return tsPart
-      .replace(/^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})-(\d{3})Z/, "$1:$2:$3.$4Z");
+    return tsPart.replace(/^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})-(\d{3})Z/, "$1:$2:$3.$4Z");
   } catch {
     return null;
   }
@@ -274,8 +268,10 @@ export async function getLastSnapshotTimestamp(
 async function pruneOldSnapshots(dir: string): Promise<void> {
   try {
     const entries = await fs.readdir(dir);
-    const snapshots = entries.filter((e) => e.endsWith(".md")).sort();
-    if (snapshots.length <= MAX_SNAPSHOTS) return;
+    const snapshots = entries.filter((e) => e.endsWith(".md")).toSorted();
+    if (snapshots.length <= MAX_SNAPSHOTS) {
+      return;
+    }
 
     const toRemove = snapshots.slice(0, snapshots.length - MAX_SNAPSHOTS);
     for (const file of toRemove) {
@@ -316,19 +312,17 @@ export async function getUserModelCapacity(
  * Rollback MEMORY.md and USER.md to the last frozen snapshot.
  * Returns true if successful, false if no snapshots exist or restore failed.
  */
-export async function rollbackToLastSnapshot(
-  agentDir: string,
-): Promise<boolean> {
+export async function rollbackToLastSnapshot(agentDir: string): Promise<boolean> {
   const dir = snapshotDir(agentDir);
   try {
     const entries = await fs.readdir(dir);
-    const snapshots = entries.filter((e) => e.endsWith(".md")).sort();
+    const snapshots = entries.filter((e) => e.endsWith(".md")).toSorted();
     if (snapshots.length === 0) {
       log.warn(`No snapshots found for rollback in ${dir}`);
       return false;
     }
 
-    const last = snapshots[snapshots.length - 1]!;
+    const last = snapshots[snapshots.length - 1];
     const snapshotPath = path.join(dir, last);
     const content = await fs.readFile(snapshotPath, "utf8");
 

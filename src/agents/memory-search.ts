@@ -4,8 +4,6 @@ import type { OpenClawConfig, MemorySearchConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import type { SecretInput } from "../config/types.secrets.js";
 import { clampInt, clampNumber, resolveUserPath } from "../utils.js";
-import { createHash } from "node:crypto";
-import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 
 export type ResolvedMemorySearchConfig = {
@@ -151,7 +149,8 @@ function mergeConfig(
   const privacyMode = overrides?.privacyMode ?? defaults?.privacyMode ?? false;
   const overflow = {
     enabled: overrides?.overflow?.enabled ?? defaults?.overflow?.enabled ?? true,
-    activationThreshold: overrides?.overflow?.activationThreshold ?? defaults?.overflow?.activationThreshold ?? 0.7,
+    activationThreshold:
+      overrides?.overflow?.activationThreshold ?? defaults?.overflow?.activationThreshold ?? 0.7,
   };
   const defaultRemote = defaults?.remote;
   const overrideRemote = overrides?.remote;

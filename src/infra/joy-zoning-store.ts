@@ -14,10 +14,11 @@
 
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import fs from "node:fs";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { SqliteConnectionPool, getGlobalSqlitePool } from "../memory/sqlite-pool.js";
-import { requireNodeSqlite } from "../memory/sqlite.js";
+import { type DatabaseSync } from "../memory/sqlite.js";
+
+type StatementSync = ReturnType<DatabaseSync["prepare"]>;
 
 const log = createSubsystemLogger("infra/joy-zoning-store");
 
@@ -129,7 +130,6 @@ CREATE INDEX IF NOT EXISTS idx_perf_created ON jz_performance(createdAt);
 
 export class JoyZoningStore {
   private pool: SqliteConnectionPool;
-  private stmtCache = new Map<string, any>();
 
   constructor(pool: SqliteConnectionPool) {
     this.pool = pool;
@@ -138,7 +138,7 @@ export class JoyZoningStore {
   }
 
   private initialize(): void {
-    this.pool.withWriteLock((db) => {
+    void this.pool.withWriteLock((db) => {
       db.exec(SCHEMA_SQL);
     });
   }
@@ -152,28 +152,34 @@ export class JoyZoningStore {
       jz_sessions: ["agentId", "lastTool"],
     };
 
-    this.pool.withWriteLock((db) => {
-      for (const [table, columns] of Object.entries(tables)) {
-        try {
-          const info = db.prepare(`PRAGMA table_info(${table})`).all() as any[];
-          const existing = new Set(info.map((c) => c.name));
+    this.pool
+      .withWriteLock((db) => {
+        for (const [table, columns] of Object.entries(tables)) {
+          try {
+            const info = db.prepare(`PRAGMA table_info(${table})`).all() as Record<
+              string,
+              unknown
+            >[];
+            const existing = new Set(info.map((c) => String(c.name)));
 
-          for (const col of columns) {
-            if (!existing.has(col)) {
-              db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} TEXT`);
+            for (const col of columns) {
+              if (!existing.has(col)) {
+                db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} TEXT`);
+              }
             }
+          } catch {
+            // Silently continue if pragma check fails
           }
-        } catch (err) {
-          // Silently continue if pragma check fails
         }
-      }
-    });
+      })
+      .catch(() => {
+        /* ignore schema init failure */
+      });
   }
 
-  private prepare(db: any, sql: string): any {
+  private prepare(db: DatabaseSync, sql: string): StatementSync {
     return db.prepare(sql);
   }
-
 
   // ── Violations ──────────────────────────────────────────────────────────
 
@@ -218,16 +224,16 @@ export class JoyZoningStore {
   }
 
   private upsertSession(
-    db: any,
+    db: DatabaseSync,
     sessionKey: string,
     level: "warning" | "block",
     timestamp: number,
     agentId?: string,
   ): void {
-    const existing = this.prepare(
+    const existing = (this.prepare(
       db,
       `SELECT warningCount, blockCount FROM jz_sessions WHERE sessionKey = ?`,
-    ).get(sessionKey) as { warningCount: number; blockCount: number } | undefined;
+    ).get(sessionKey) ?? undefined) as { warningCount: number; blockCount: number } | undefined;
 
     if (existing) {
       const warningInc = level === "warning" ? 1 : 0;
@@ -288,12 +294,17 @@ export class JoyZoningStore {
     return await this.incrementStrikes(filePath, 1, violationMessage);
   }
 
-  async incrementStrikes(filePath: string, amount: number, violationMessage?: string): Promise<number> {
+  async incrementStrikes(
+    filePath: string,
+    amount: number,
+    violationMessage?: string,
+  ): Promise<number> {
     const now = Date.now();
     return await this.pool.withWriteLock((db) => {
-      const existing = this.prepare(db, `SELECT strikeCount FROM jz_strikes WHERE filePath = ?`).get(
-        filePath,
-      ) as { strikeCount: number } | undefined;
+      const existing = this.prepare(
+        db,
+        `SELECT strikeCount FROM jz_strikes WHERE filePath = ?`,
+      ).get(filePath) as { strikeCount: number } | undefined;
 
       if (existing) {
         const newCount = existing.strikeCount + amount;
@@ -354,26 +365,35 @@ export class JoyZoningStore {
    * Uses Depth-First Search (DFS).
    */
   detectCycle(sourcePath: string, targetPath: string): string[] | null {
-    if (sourcePath === targetPath) return [sourcePath, targetPath];
+    if (sourcePath === targetPath) {
+      return [sourcePath, targetPath];
+    }
 
     const db = this.pool.acquireRead();
     const visited = new Set<string>();
     const path: string[] = [sourcePath];
 
     const dfs = (current: string): string[] | null => {
-      if (current === sourcePath) return [...path, current];
-      if (visited.has(current)) return null;
+      if (current === sourcePath) {
+        return [...path, current];
+      }
+      if (visited.has(current)) {
+        return null;
+      }
 
       visited.add(current);
       path.push(current);
 
-      const deps = this.prepare(db, `SELECT targetPath FROM jz_dependencies WHERE sourcePath = ?`).all(
-        current,
-      ) as { targetPath: string }[];
+      const deps = this.prepare(
+        db,
+        `SELECT targetPath FROM jz_dependencies WHERE sourcePath = ?`,
+      ).all(current) as { targetPath: string }[];
 
       for (const dep of deps) {
         const result = dfs(dep.targetPath);
-        if (result) return result;
+        if (result) {
+          return result;
+        }
       }
 
       path.pop();
@@ -392,8 +412,6 @@ export class JoyZoningStore {
       ).run(filePath, durationMs, now);
     });
   }
-
-
 
   getSessionSummary(sessionKey: string): StoredSession | null {
     const db = this.pool.acquireRead();
@@ -475,7 +493,9 @@ export class JoyZoningStore {
    */
   async pruneOldSessions(olderThanMs: number): Promise<number> {
     return await this.pool.withWriteLock((db) => {
-      const result = this.prepare(db, `DELETE FROM jz_sessions WHERE lastSeen < ?`).run(olderThanMs);
+      const result = this.prepare(db, `DELETE FROM jz_sessions WHERE lastSeen < ?`).run(
+        olderThanMs,
+      );
       return Number(result.changes);
     });
   }
@@ -508,7 +528,9 @@ let _defaultStore: JoyZoningStore | null = null;
  * The DB file is created at `~/.openclaw/joy-zoning/audit.sqlite`.
  */
 export function getJoyZoningStore(dbPath?: string): JoyZoningStore {
-  if (_defaultStore) return _defaultStore;
+  if (_defaultStore) {
+    return _defaultStore;
+  }
 
   const resolvedPath =
     dbPath ??
@@ -524,7 +546,9 @@ export function getJoyZoningStore(dbPath?: string): JoyZoningStore {
     log.info(`Joy-Zoning audit store opened via pool at ${resolvedPath}`);
     return _defaultStore;
   } catch (err) {
-    log.warn(`Failed to open Joy-Zoning store: ${err instanceof Error ? err.message : String(err)}`);
+    log.warn(
+      `Failed to open Joy-Zoning store: ${err instanceof Error ? err.message : String(err)}`,
+    );
     throw err;
   }
 }

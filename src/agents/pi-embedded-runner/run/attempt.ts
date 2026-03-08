@@ -12,6 +12,7 @@ import { resolveChannelCapabilities } from "../../../config/channel-capabilities
 import type { OpenClawConfig } from "../../../config/config.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { ensureGlobalUndiciStreamTimeouts } from "../../../infra/net/undici-global-dispatcher.js";
+import { logStrategicMetric } from "../../../logging/diagnostic.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import type {
@@ -118,10 +119,19 @@ import { dropThinkingBlocks } from "../thinking.js";
 import { collectAllowedToolNames } from "../tool-name-allowlist.js";
 import { installToolResultContextGuard } from "../tool-result-context-guard.js";
 import { splitSdkTools } from "../tool-split.js";
-import { logStrategicMetric } from "../../../logging/diagnostic.js";
 import { describeUnknownError, mapThinkingLevel } from "../utils.js";
 
-const FRUSTRATION_TOKENS = ["I cannot", "failed repeated", "unable to", "stop", "refuse", "error", "missing", "broken", "blocked"];
+const FRUSTRATION_TOKENS = [
+  "I cannot",
+  "failed repeated",
+  "unable to",
+  "stop",
+  "refuse",
+  "error",
+  "missing",
+  "broken",
+  "blocked",
+];
 import { flushPendingToolResultsAfterIdle } from "../wait-for-idle-before-flush.js";
 import {
   selectCompactionTimeoutSnapshot,
@@ -1874,11 +1884,13 @@ export async function runEmbeddedAttempt(
       const allTexts = assistantTexts.join(" ").toLowerCase();
       let frustrationCount = 0;
       for (const token of FRUSTRATION_TOKENS) {
-        if (allTexts.includes(token)) frustrationCount++;
+        if (allTexts.includes(token)) {
+          frustrationCount++;
+        }
       }
       const sentimentValue = Math.min(1.0, frustrationCount / 3.0);
       if (sentimentValue > 0) {
-        logStrategicMetric({
+        await logStrategicMetric({
           sessionKey: params.sessionKey ?? params.sessionId,
           metricType: "sentiment",
           value: sentimentValue,

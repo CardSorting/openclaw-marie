@@ -3,7 +3,6 @@ import {
   evaluateToolCall,
   buildAuditSummary,
   resetPolicyStateForTest,
-  getOrCreatePolicyState,
   clearStrikesForFile,
   setConfigForTest,
   __testing,

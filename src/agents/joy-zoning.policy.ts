@@ -1,17 +1,15 @@
+import type { JoyZoningConfig } from "../config/types.joy-zoning.js";
+import { emitDiagnosticEvent } from "../infra/diagnostic-events.js";
+import type { JoyZoningStore } from "../infra/joy-zoning-store.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import {
   getLayer,
   validateDependency,
   validateJoyZoning,
   suggestLayerForContent,
-  getTargetPaths,
-  getFileLayerContext,
   getCorrectionHint,
   type JoyZoningLayer,
 } from "../utils/joy-zoning.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
-import type { JoyZoningStore } from "../infra/joy-zoning-store.js";
-import type { JoyZoningConfig } from "../config/types.joy-zoning.js";
-import { emitDiagnosticEvent } from "../infra/diagnostic-events.js";
 
 const log = createSubsystemLogger("agents/joy-zoning");
 
@@ -21,12 +19,17 @@ let _store: JoyZoningStore | null = null;
 let _storeLoadAttempted = false;
 
 function getStore(): JoyZoningStore | null {
-  if (_store) return _store;
-  if (_storeLoadAttempted) return null;
+  if (_store) {
+    return _store;
+  }
+  if (_storeLoadAttempted) {
+    return null;
+  }
   _storeLoadAttempted = true;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getJoyZoningStore } = require("../infra/joy-zoning-store.js") as typeof import("../infra/joy-zoning-store.js");
+    const { getJoyZoningStore } =
+      require("../infra/joy-zoning-store.js") as typeof import("../infra/joy-zoning-store.js");
     _store = getJoyZoningStore();
     return _store;
   } catch {
@@ -54,15 +57,21 @@ let _config: JoyZoningConfig | null = null;
 let _configLoadAttempted = false;
 
 export function getConfig(): JoyZoningConfig {
-  if (_config) return _config;
-  if (_configLoadAttempted) return {};
+  if (_config) {
+    return _config;
+  }
+  if (_configLoadAttempted) {
+    return {};
+  }
   _configLoadAttempted = true;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const configMod = require("../config/io.js") as { getRuntimeConfigSnapshot: () => { config?: { joyZoning?: JoyZoningConfig } } | null };
+    const configMod = require("../config/io.js") as {
+      getRuntimeConfigSnapshot: () => { config?: { joyZoning?: JoyZoningConfig } } | null;
+    };
     const snapshot = configMod.getRuntimeConfigSnapshot();
     _config = snapshot?.config?.joyZoning ?? {};
-    return _config!;
+    return _config;
   } catch {
     return {};
   }
@@ -77,8 +86,12 @@ export function getConfig(): JoyZoningConfig {
 function applyStrictness(level: "warning" | "block"): "warning" | "block" {
   const config = getConfig();
   const strictness = config.strictness ?? "enforced";
-  if (strictness === "advisory") return "warning";
-  if (strictness === "strict") return "block";
+  if (strictness === "advisory") {
+    return "warning";
+  }
+  if (strictness === "strict") {
+    return "block";
+  }
   return level;
 }
 
@@ -132,7 +145,9 @@ export function getOrCreatePolicyState(sessionKey: string): JoyZoningPolicyState
     // Evict oldest session if we exceed max
     if (sessionStates.size > MAX_SESSION_STATES) {
       const oldest = sessionStates.keys().next().value;
-      if (oldest && oldest !== sessionKey) sessionStates.delete(oldest);
+      if (oldest && oldest !== sessionKey) {
+        sessionStates.delete(oldest);
+      }
     }
   }
   return state;
@@ -163,8 +178,10 @@ export function evaluateToolCall(params: {
 }): JoyZoningViolation | null {
   // ── Config gate ──
   const config = getConfig();
-  if (config.enabled === false) return null;
-  const { toolName, content, importPaths, sessionKey, agentId, thought } = params;
+  if (config.enabled === false) {
+    return null;
+  }
+  const { toolName, content, importPaths, sessionKey } = params;
 
   // ── Absolute Self-Preservation ──
   const jzInfraPaths = [
@@ -182,14 +199,15 @@ export function evaluateToolCall(params: {
 
   // ── Bash Interception ──
   if (toolName === "bash" || toolName === "run_command") {
-    const bashCmd = (params as any).command || "";
+    const bashCmd = (params as Record<string, unknown>).command;
+    const bashCmdStr = typeof bashCmd === "string" ? bashCmd : "";
     const destructivePatterns = [
       /\brm\s+.*-rf?\b/,
       /\bmv\s+.*\bsrc\/(?:domain|core)\b/,
       /\bsed\s+.*-i\b/,
       /[>]{1,2}\s*src\/(?:domain|core)/,
     ];
-    if (destructivePatterns.some((pattern) => pattern.test(bashCmd))) {
+    if (destructivePatterns.some((pattern) => pattern.test(bashCmdStr))) {
       return {
         level: "block",
         message: `🛑 DESTRUCTIVE BASH INTERCEPTED: The command contains patterns that bypass architectural safeguards (deletion/renaming in protected layers). Use explicit file-modifying tools instead.`,
@@ -206,13 +224,17 @@ export function evaluateToolCall(params: {
   }
 
   const filePath = params.filePath;
-  if (!filePath && !params.newPath) return null;
+  if (!filePath && !params.newPath) {
+    return null;
+  }
 
   // Normalize to relative src path
   const normalized = filePath ? normalizePath(filePath) : null;
   const normalizedNew = params.newPath ? normalizePath(params.newPath) : null;
 
-  if (!normalized && !normalizedNew) return null;
+  if (!normalized && !normalizedNew) {
+    return null;
+  }
 
   const start = performance.now();
   const sourceLayer = normalized ? getLayer(normalized) : null;
@@ -247,8 +269,9 @@ export function evaluateToolCall(params: {
 
   // From here on, use 'normalized' as the primary target if it exists, otherwise 'normalizedNew'
   const activeNormalized = normalized || normalizedNew;
-  if (!activeNormalized) return null;
-  const activeLayer = getLayer(activeNormalized);
+  if (!activeNormalized) {
+    return null;
+  }
 
   // Check for Break-Glass Override [JZ:OVERRIDE] in thoughts
   const hasOverride = params.thought?.includes("[JZ:OVERRIDE]");
@@ -304,7 +327,9 @@ export function evaluateToolCall(params: {
       const store = getStore();
       for (const importPath of importPaths) {
         const normalizedImport = normalizePath(importPath);
-        if (!normalizedImport) continue;
+        if (!normalizedImport) {
+          continue;
+        }
 
         // a) Reflexive Propagation: check if target file is tainted
         if (store && sourceLayer) {
@@ -341,11 +366,18 @@ export function evaluateToolCall(params: {
               sourceLayer: sourceLayer || "Infrastructure",
               targetLayer: getLayer(normalizedImport),
             };
-            trackViolation(getOrCreatePolicyState(sessionKey ?? "default"), violation, sessionKey, normalized, params.agentId, params.thought);
+            trackViolation(
+              getOrCreatePolicyState(sessionKey ?? "default"),
+              violation,
+              sessionKey,
+              normalized,
+              params.agentId,
+              params.thought,
+            );
             return violation;
           }
           // Record the dependency for future cycle detection
-          store.recordDependency(normalized, normalizedImport);
+          void store.recordDependency(normalized, normalizedImport);
         }
 
         if (normalized) {
@@ -388,7 +420,9 @@ export function evaluateToolCall(params: {
       log.warn(`Joy-Zoning evaluateToolCall SLOW: ${duration.toFixed(2)}ms for ${pathRef}`);
       if (pathRef !== "unknown") {
         const store = getStore();
-        if (store) store.recordPerformance(pathRef, duration);
+        if (store) {
+          void store.recordPerformance(pathRef, duration);
+        }
       }
     } else {
       log.debug(`Joy-Zoning evaluation: ${duration.toFixed(2)}ms for ${pathRef}`);
@@ -400,20 +434,34 @@ export function evaluateToolCall(params: {
 
 function normalizePath(filePath: string): string | null {
   const srcIdx = filePath.indexOf("src/");
-  if (srcIdx === -1) return null;
+  if (srcIdx === -1) {
+    return null;
+  }
   return filePath.slice(srcIdx);
 }
 
 export function detectLayer(filePath: string): JoyZoningLayer | null {
   const normalized = normalizePath(filePath);
-  if (!normalized) return null;
+  if (!normalized) {
+    return null;
+  }
 
-  if (normalized.startsWith("src/domain/")) return "Domain";
-  if (normalized.startsWith("src/core/")) return "Core";
-  if (normalized.startsWith("src/infra/")) return "Infrastructure";
-  if (normalized.startsWith("src/plumbing/")) return "Plumbing";
-  if (normalized.startsWith("src/ui/")) return "UI";
-  
+  if (normalized.startsWith("src/domain/")) {
+    return "Domain";
+  }
+  if (normalized.startsWith("src/core/")) {
+    return "Core";
+  }
+  if (normalized.startsWith("src/infra/")) {
+    return "Infrastructure";
+  }
+  if (normalized.startsWith("src/plumbing/")) {
+    return "Plumbing";
+  }
+  if (normalized.startsWith("src/ui/")) {
+    return "UI";
+  }
+
   return null;
 }
 
@@ -451,7 +499,14 @@ function resolveContentViolation(params: {
       violations: errors,
     };
     if (sessionKey) {
-      trackViolation(getOrCreatePolicyState(sessionKey), violation, sessionKey, filePath, agentId, thoughtSnippet);
+      trackViolation(
+        getOrCreatePolicyState(sessionKey),
+        violation,
+        sessionKey,
+        filePath,
+        agentId,
+        thoughtSnippet,
+      );
     }
     return violation;
   }
@@ -466,8 +521,11 @@ function resolveContentViolation(params: {
   if (sourceLayer === "Domain") {
     if (strikes === 1) {
       const effectiveLevel = applyStrictness("block");
-      if (effectiveLevel === "block") state.blockCount++;
-      else state.warningCount++;
+      if (effectiveLevel === "block") {
+        state.blockCount++;
+      } else {
+        state.warningCount++;
+      }
 
       const violation: JoyZoningViolation = {
         level: effectiveLevel,
@@ -492,7 +550,9 @@ function resolveContentViolation(params: {
         violations: errors,
       };
       trackViolation(state, violation, sessionKey, filePath, agentId, thoughtSnippet);
-      log.info(`Joy-Zoning WARNING (Strike ${strikes}) [${sessionKey}]: Domain violation on ${filePath}`);
+      log.info(
+        `Joy-Zoning WARNING (Strike ${strikes}) [${sessionKey}]: Domain violation on ${filePath}`,
+      );
       persistStrike(filePath, violation.message);
       return violation;
     }
@@ -502,14 +562,19 @@ function resolveContentViolation(params: {
   if (sourceLayer === "Core" || sourceLayer === "Infrastructure") {
     const rawLevel: "warning" | "block" = strikes > 3 ? "block" : "warning";
     const effectiveLevel = applyStrictness(rawLevel);
-    
-    if (effectiveLevel === "block") state.blockCount++;
-    else state.warningCount++;
 
-    const prefix = effectiveLevel === "block" ? "🛑 [Progressive Block]" : "⚠️ [Architectural Warning]";
-    const suffix = effectiveLevel === "warning" && strikes < 3 
-      ? `\n\n💡 You have ${3 - strikes} grace attempts remaining before this becomes a block.`
-      : "";
+    if (effectiveLevel === "block") {
+      state.blockCount++;
+    } else {
+      state.warningCount++;
+    }
+
+    const prefix =
+      effectiveLevel === "block" ? "🛑 [Progressive Block]" : "⚠️ [Architectural Warning]";
+    const suffix =
+      effectiveLevel === "warning" && strikes < 3
+        ? `\n\n💡 You have ${3 - strikes} grace attempts remaining before this becomes a block.`
+        : "";
 
     const violation: JoyZoningViolation = {
       level: effectiveLevel,
@@ -548,7 +613,8 @@ function resolvePathViolation(params: {
   agentId?: string;
   thoughtSnippet?: string;
 }): JoyZoningViolation {
-  const { message, sourceLayer, targetLayer, sessionKey, filePath, agentId, thoughtSnippet } = params;
+  const { message, sourceLayer, targetLayer, sessionKey, filePath, agentId, thoughtSnippet } =
+    params;
   const isSmell = message.includes("Architectural Smell");
 
   if (!sessionKey) {
@@ -570,8 +636,11 @@ function resolvePathViolation(params: {
 
     if (strikes === 1) {
       const effectiveLevel = applyStrictness("block");
-      if (effectiveLevel === "block") state.blockCount++;
-      else state.warningCount++;
+      if (effectiveLevel === "block") {
+        state.blockCount++;
+      } else {
+        state.warningCount++;
+      }
       const violation: JoyZoningViolation = {
         level: effectiveLevel,
         message: `🛑 DOMAIN DEPENDENCY VIOLATION: [🏗️ ARCHITECTURAL CORRECTION REQUIRED] ${message}`,
@@ -606,7 +675,9 @@ function resolvePathViolation(params: {
       state.warningCount > MAX_WARNINGS_BEFORE_BLOCK ? "block" : "warning";
     const level = applyStrictness(rawLevel);
 
-    if (level === "block") state.blockCount++;
+    if (level === "block") {
+      state.blockCount++;
+    }
 
     const violation: JoyZoningViolation = {
       level,
@@ -615,7 +686,7 @@ function resolvePathViolation(params: {
       targetLayer,
     };
     trackViolation(state, violation, sessionKey, filePath, agentId, thoughtSnippet);
-    
+
     if (level === "block") {
       log.warn(`Joy-Zoning BLOCK (progressive) [${sessionKey}]: ${message}`);
     } else {
@@ -688,27 +759,25 @@ function trackViolation(
         action: violation.level === "warning" ? "warn" : "block",
         message: violation.message.split("\n")[0] ?? violation.message,
       });
-    } catch { /* advisory */ }
+    } catch {
+      /* advisory */
+    }
   }
 
   // Persist to SQLite (advisory)
   if (sessionKey && filePath) {
-    try {
-      const store = getStore();
-      if (getConfig().persist !== false) {
-        store?.recordViolation({
-          sessionKey,
-          filePath,
-          layer: violation.sourceLayer,
-          level: violation.level,
-          message: violation.message.split("\n")[0] ?? violation.message,
-          correctionHint: violation.correctionHint,
-          agentId,
-          thoughtSnippet: thoughtSnippet?.slice(0, 500), // Cap thought snippet
-        });
-      }
-    } catch {
-      // Persistence is advisory — never break enforcement
+    const store = getStore();
+    if (store && getConfig().persist !== false) {
+      void store.recordViolation({
+        sessionKey,
+        filePath,
+        layer: violation.sourceLayer,
+        level: violation.level,
+        message: violation.message.split("\n")[0] ?? violation.message,
+        correctionHint: violation.correctionHint,
+        agentId,
+        thoughtSnippet: thoughtSnippet?.slice(0, 500), // Cap thought snippet
+      });
     }
   }
 }
@@ -722,17 +791,13 @@ export function clearStrikesForFile(sessionKey: string, filePath: string): void 
     const normalized = normalizePath(filePath);
     if (normalized) {
       state.strikeMap.delete(normalized);
-      try {
-        getStore()?.resetStrike(normalized);
-      } catch { /* advisory */ }
+      void getStore()?.resetStrike(normalized);
     }
   }
 }
 
 function persistStrike(filePath: string, message?: string): void {
-  try {
-    getStore()?.getOrIncrementStrike(filePath, message);
-  } catch { /* advisory */ }
+  void getStore()?.getOrIncrementStrike(filePath, message);
 }
 
 // ── System Prompt Integration ───────────────────────────────────────────────
@@ -756,19 +821,27 @@ export function buildAuditSummary(sessionKey?: string): string {
   lines.push("**DOMAIN** (config/, types/, *.policy.ts)");
   lines.push("  Purpose: Pure business logic — policies, rules, type definitions.");
   lines.push("  What to avoid: I/O, external imports, side effects.");
-  lines.push('  Principle: If you can\'t test it with zero mocks, it doesn\'t belong here.');
+  lines.push("  Principle: If you can't test it with zero mocks, it doesn't belong here.");
   lines.push("");
   lines.push("**CORE** (agents/, commands/, cron/, routing/, sessions/, hooks/, plugins/)");
-  lines.push("  Purpose: Application orchestration — coordinates domain logic with infrastructure.");
+  lines.push(
+    "  Purpose: Application orchestration — coordinates domain logic with infrastructure.",
+  );
   lines.push("  What to avoid: Direct UI rendering, raw I/O (delegate to Infrastructure).");
   lines.push("  Principle: Orchestrate, don't implement low-level concerns directly.");
   lines.push("");
-  lines.push("**INFRASTRUCTURE** (infra/, browser/, gateway/, providers/, secrets/, security/, web/)");
-  lines.push("  Purpose: Adapters and integrations — connects the outside world to domain contracts.");
+  lines.push(
+    "**INFRASTRUCTURE** (infra/, browser/, gateway/, providers/, secrets/, security/, web/)",
+  );
+  lines.push(
+    "  Purpose: Adapters and integrations — connects the outside world to domain contracts.",
+  );
   lines.push("  What to avoid: Business rules, UI components, domain logic.");
   lines.push("  Principle: Implement interfaces defined by domain. Keep domain-agnostic.");
   lines.push("");
-  lines.push("**UI** (channels/, tui/, terminal/, cli/, slack/, telegram/, discord/, whatsapp/, signal/, line/, imessage/)");
+  lines.push(
+    "**UI** (channels/, tui/, terminal/, cli/, slack/, telegram/, discord/, whatsapp/, signal/, line/, imessage/)",
+  );
   lines.push("  Purpose: Presentation — what the user sees and interacts with.");
   lines.push("  What to avoid: Business logic, direct I/O, infrastructure imports.");
   lines.push("  Principle: Render state, dispatch intentions. Never compute business outcomes.");
@@ -776,7 +849,9 @@ export function buildAuditSummary(sessionKey?: string): string {
   lines.push("**PLUMBING** (utils/, logging/, shared/, markdown/, i18n/)");
   lines.push("  Purpose: Shared utilities — stateless helpers used across layers.");
   lines.push("  What to avoid: Dependencies on any other layer (domain, infra, UI).");
-  lines.push("  Principle: Zero context. If it needs to know about a specific layer, it belongs in that layer.");
+  lines.push(
+    "  Principle: Zero context. If it needs to know about a specific layer, it belongs in that layer.",
+  );
   lines.push("");
 
   // ── Dependency Flow ──
@@ -790,11 +865,17 @@ export function buildAuditSummary(sessionKey?: string): string {
 
   // ── Violation Remediation ──
   lines.push("### 💡 When Violations Are Detected");
-  lines.push("- Cross-layer import? → Extract an interface in Domain, implement in Infrastructure.");
+  lines.push(
+    "- Cross-layer import? → Extract an interface in Domain, implement in Infrastructure.",
+  );
   lines.push("- Business logic in UI? → Move the logic to Domain, pass results to UI.");
-  lines.push("- I/O in Domain? → Wrap it in an Infrastructure adapter, inject via dependency inversion.");
+  lines.push(
+    "- I/O in Domain? → Wrap it in an Infrastructure adapter, inject via dependency inversion.",
+  );
   lines.push("- 'any' type in Domain? → Define a proper interface or type alias.");
-  lines.push("- Plumbing importing Core? → Move the logic to Core, or make it a standalone utility.");
+  lines.push(
+    "- Plumbing importing Core? → Move the logic to Core, or make it a standalone utility.",
+  );
 
   // ── Session Audit (in-memory) ──
   if (sessionKey) {

@@ -77,7 +77,6 @@ export interface AuthRateLimiter {
 const DEFAULT_MAX_ATTEMPTS = 10;
 const DEFAULT_WINDOW_MS = 60_000; // 1 minute
 const DEFAULT_LOCKOUT_MS = 300_000; // 5 minutes
-const PRUNE_INTERVAL_MS = 60_000; // prune stale entries every minute
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -163,12 +162,12 @@ export async function createAuthRateLimiter(config?: RateLimitConfig): Promise<A
       entry.attempts = [];
       // Note: we can't await here without making check() async too.
       // But lockout expiry is a self-correcting state.
-      store.setSessionState(sessionKey, stateKey, entry);
+      void store.setSessionState(sessionKey, stateKey, entry);
     }
 
     const changed = slideWindow(entry, now);
     if (changed) {
-      store.setSessionState(sessionKey, stateKey, entry);
+      void store.setSessionState(sessionKey, stateKey, entry);
     }
     const remaining = Math.max(0, maxAttempts - entry.attempts.length);
     return { allowed: remaining > 0, remaining, retryAfterMs: 0 };

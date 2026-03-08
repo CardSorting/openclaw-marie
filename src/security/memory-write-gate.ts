@@ -1,11 +1,11 @@
-import { createSubsystemLogger } from "../logging/subsystem.js";
-import { scanInput } from "./injection-scanner.js";
-import { redactPII } from "./redaction.js";
-import { detectHoneyPotLeak } from "./honey-pots.js";
-import { emitForensicEvent } from "./quarantine-shadow.js";
-import { getSecurityAuditStore } from "../infra/security-audit-store.js";
-import { getJoyZoningStore } from "../infra/joy-zoning-store.js";
 import { MEMORY_CHAR_CAP, USER_CHAR_CAP } from "../agents/marie-memory.js";
+import { getJoyZoningStore } from "../infra/joy-zoning-store.js";
+import { getSecurityAuditStore } from "../infra/security-audit-store.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
+import { detectHoneyPotLeak } from "./honey-pots.js";
+import { scanInput } from "./injection-scanner.js";
+import { emitForensicEvent } from "./quarantine-shadow.js";
+import { redactPII } from "./redaction.js";
 
 const log = createSubsystemLogger("security/memory-write-gate");
 
@@ -22,7 +22,7 @@ export interface ValidationResult {
 export async function validateMemoryWrite(
   content: string,
   type: "memory" | "userModel",
-  options?: { sessionKey?: string },
+  _options?: { sessionKey?: string },
 ): Promise<ValidationResult> {
   const cap = type === "memory" ? MEMORY_CHAR_CAP : USER_CHAR_CAP;
   const fileName = type === "memory" ? "MEMORY.md" : "USER.md";
@@ -38,10 +38,18 @@ export async function validateMemoryWrite(
   // 0.5 Honey-pot check: Detect if agent is trying to persist canary secrets
   const leak = detectHoneyPotLeak(content);
   if (leak) {
-      log.error(`HONEY-POT LEAK DETECTED in memory write [${type}]: ${leak.id}`);
-      await emitForensicEvent({ type: "HONEYPOT_LEAK", leak: leak.id, channel: "memory", file: fileName });
-      await jzStore.incrementStrikes("HONEYPOT_LEAK", 10);
-      return { ok: false, error: "SECURITY ERROR: Unauthorized persistence of canary data detected." };
+    log.error(`HONEY-POT LEAK DETECTED in memory write [${type}]: ${leak.id}`);
+    await emitForensicEvent({
+      type: "HONEYPOT_LEAK",
+      leak: leak.id,
+      channel: "memory",
+      file: fileName,
+    });
+    await jzStore.incrementStrikes("HONEYPOT_LEAK", 10);
+    return {
+      ok: false,
+      error: "SECURITY ERROR: Unauthorized persistence of canary data detected.",
+    };
   }
 
   // 1. Injection Scanning
@@ -50,7 +58,7 @@ export async function validateMemoryWrite(
     const firstFinding = scan.findings[0];
     const category = firstFinding?.category ?? "UNKNOWN";
     const reason = firstFinding?.description ?? "Suspicious pattern detected";
-    
+
     log.error(`MALICIOUS WRITE BLOCKED: [${category}] ${reason}`);
     await store.recordFinding({
       category: "INJECTION_ATTEMPT",

@@ -24,7 +24,7 @@ describe("resolveAgentRoute", () => {
     });
     expect(route.agentId).toBe("main");
     expect(route.accountId).toBe("default");
-    expect(route.sessionKey).toBe("agent:main:main");
+    expect(route.sessionKey).toBe("agent:main:whatsapp:direct:+15551234567");
     expect(route.matchedBy).toBe("default");
   });
 
@@ -48,6 +48,50 @@ describe("resolveAgentRoute", () => {
       });
       expect(route.sessionKey).toBe(testCase.expected);
     }
+  });
+
+  test("elevates to per-channel-peer for high-risk agents using main scope", () => {
+    const cfg: OpenClawConfig = {
+      session: { dmScope: "main" },
+      agents: {
+        list: [
+          {
+            id: "risky",
+            tools: { allow: ["exec"] },
+          },
+        ],
+      },
+    };
+    const route = resolveAgentRoute({
+      cfg,
+      channel: "whatsapp",
+      accountId: null,
+      peer: { kind: "direct", id: "+15551234567" },
+    });
+    // Should be elevated to per-channel-peer, resulting in the channel:kind:id suffix
+    expect(route.sessionKey).toBe("agent:risky:whatsapp:direct:+15551234567");
+  });
+
+  test("elevates to per-account-channel-peer for multi-account channels", () => {
+    const cfg: OpenClawConfig = {
+      session: { dmScope: "per-channel-peer" },
+      channels: {
+        whatsapp: {
+          accounts: {
+            personal: {},
+            work: {},
+          },
+        },
+      },
+    };
+    const route = resolveAgentRoute({
+      cfg,
+      channel: "whatsapp",
+      accountId: "personal",
+      peer: { kind: "direct", id: "+15551234567" },
+    });
+    // Should be elevated to per-account-channel-peer, including the accountId
+    expect(route.sessionKey).toBe("agent:main:whatsapp:personal:direct:+15551234567");
   });
 
   test("identityLinks applies to direct-message scopes", () => {
@@ -108,7 +152,7 @@ describe("resolveAgentRoute", () => {
       peer: { kind: "direct", id: "+1000" },
     });
     expect(route.agentId).toBe("a");
-    expect(route.sessionKey).toBe("agent:a:main");
+    expect(route.sessionKey).toBe("agent:a:whatsapp:direct:+1000");
     expect(route.matchedBy).toBe("binding.peer");
   });
 
@@ -362,7 +406,7 @@ describe("resolveAgentRoute", () => {
       peer: { kind: "direct", id: "+1000" },
     });
     expect(route.agentId).toBe("home");
-    expect(route.sessionKey).toBe("agent:home:main");
+    expect(route.sessionKey).toBe("agent:home:whatsapp:direct:+1000");
   });
 });
 

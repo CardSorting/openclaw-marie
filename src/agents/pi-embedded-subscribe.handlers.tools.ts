@@ -1,8 +1,9 @@
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
-import { logStrategicMetric } from "../logging/diagnostic.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
+import { logStrategicMetric } from "../logging/diagnostic.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import type { PluginHookAfterToolCallEvent } from "../plugins/types.js";
+import { clearStrikesForFile } from "./joy-zoning.policy.js";
 import { normalizeTextForComparison } from "./pi-embedded-helpers.js";
 import { isMessagingTool, isMessagingToolSendAction } from "./pi-embedded-messaging.js";
 import type {
@@ -22,7 +23,6 @@ import { inferToolMetaFromArgs } from "./pi-embedded-utils.js";
 import { consumeAdjustedParamsForToolCall } from "./pi-tools.before-tool-call.js";
 import { buildToolMutationState, isSameToolMutationAction } from "./tool-mutation.js";
 import { normalizeToolName } from "./tool-policy.js";
-import { clearStrikesForFile } from "./joy-zoning.policy.js";
 
 type ToolStartRecord = {
   startTime: number;
@@ -446,14 +446,26 @@ export async function handleToolExecutionEnd(
 
   // Marie Production Hardening: Surprise Score Telemetry
   let surprise = 0;
-  if (isToolError) surprise = 0.4;
+  if (isToolError) {
+    surprise = 0.4;
+  }
   const outputText = extractToolResultText(sanitizedResult)?.toLowerCase() ?? "";
-  if (outputText.includes("not found") || outputText.includes("no such file")) surprise = Math.max(surprise, 0.7);
-  if (outputText.includes("permission denied") || outputText.includes("access denied")) surprise = Math.max(surprise, 0.8);
-  if (outputText.includes("fatal") || outputText.includes("critical error") || outputText.includes("panic")) surprise = Math.max(surprise, 1.0);
-  
+  if (outputText.includes("not found") || outputText.includes("no such file")) {
+    surprise = Math.max(surprise, 0.7);
+  }
+  if (outputText.includes("permission denied") || outputText.includes("access denied")) {
+    surprise = Math.max(surprise, 0.8);
+  }
+  if (
+    outputText.includes("fatal") ||
+    outputText.includes("critical error") ||
+    outputText.includes("panic")
+  ) {
+    surprise = Math.max(surprise, 1.0);
+  }
+
   if (surprise > 0) {
-    logStrategicMetric({
+    await logStrategicMetric({
       sessionKey: ctx.params.sessionKey ?? ctx.params.sessionId,
       metricType: "surprise",
       value: surprise,

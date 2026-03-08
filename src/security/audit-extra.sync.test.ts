@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
-import { collectAttackSurfaceSummaryFindings } from "./audit-extra.sync.js";
+import {
+  collectAttackSurfaceSummaryFindings,
+  collectSessionIsolationFindings,
+} from "./audit-extra.sync.js";
 import { safeEqualSecret } from "./secret-equal.js";
 
 describe("collectAttackSurfaceSummaryFindings", () => {
@@ -51,5 +54,62 @@ describe("safeEqualSecret", () => {
     expect(safeEqualSecret(undefined, "secret")).toBe(false);
     expect(safeEqualSecret("secret", undefined)).toBe(false);
     expect(safeEqualSecret(null, "secret")).toBe(false);
+  });
+});
+
+describe("collectSessionIsolationFindings", () => {
+  it("reports no findings for safe configuration", () => {
+    const cfg: OpenClawConfig = {
+      session: { dmScope: "per-channel-peer" },
+      channels: {
+        whatsapp: { accounts: { main: {} } },
+      },
+    };
+
+    const findings = collectSessionIsolationFindings(cfg);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("flags high-risk agents using 'main' scope", () => {
+    const cfg: OpenClawConfig = {
+      session: { dmScope: "main" },
+      agents: {
+        list: [
+          {
+            id: "risky-agent",
+            tools: { allow: ["exec"] },
+          },
+        ],
+      },
+    };
+
+    const findings = collectSessionIsolationFindings(cfg);
+    const riskFinding = findings.find(
+      (f) => f.checkId === "session.isolation.risky_tools_broad_scope",
+    );
+    expect(riskFinding).toBeDefined();
+    expect(riskFinding?.detail).toContain("sensitive tools (exec/process/fs)");
+  });
+
+  it("flags multi-account channels without account-level isolation", () => {
+    const cfg: OpenClawConfig = {
+      session: { dmScope: "per-channel-peer" },
+      channels: {
+        whatsapp: {
+          accounts: {
+            personal: {},
+            work: {},
+          },
+        },
+      },
+    };
+
+    const findings = collectSessionIsolationFindings(cfg);
+    const multiAccountFinding = findings.find(
+      (f) => f.checkId === "session.isolation.multi_account_leakage",
+    );
+    expect(multiAccountFinding).toBeDefined();
+    expect(multiAccountFinding?.detail).toContain('Channel "whatsapp" has multiple accounts');
+    expect(multiAccountFinding?.remediation).toContain("per-account-channel-peer");
   });
 });

@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import fs from "node:fs";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { SqliteConnectionPool, getGlobalSqlitePool } from "../memory/sqlite-pool.js";
+import { type DatabaseSync } from "../memory/sqlite.js";
 
 const log = createSubsystemLogger("agents/strategic-evolution-store");
+
+type StatementSync = ReturnType<DatabaseSync["prepare"]>;
 
 export type MetricType = "sentiment" | "discovery" | "surprise" | "latency" | "success_rate";
 
@@ -81,7 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_bash_history_ended ON sev_bash_history(endedAt);
 
 export class StrategicEvolutionStore {
   private pool: SqliteConnectionPool;
-  private stmtCache = new Map<string, any>();
+  private stmtCache = new Map<string, StatementSync>();
 
   private constructor(pool: SqliteConnectionPool) {
     this.pool = pool;
@@ -100,7 +102,7 @@ export class StrategicEvolutionStore {
     });
   }
 
-  private prepare(db: any, sql: string): any {
+  private prepare(db: DatabaseSync, sql: string): StatementSync {
     // Statement caching is still database-specific if using multiple connections.
     // However, since we use a shared pool and node:sqlite is synchronous,
     // we can either cache per-connection or just prepare fresh.
@@ -112,7 +114,7 @@ export class StrategicEvolutionStore {
     sessionKey: string;
     type: MetricType;
     value: number;
-    metadata?: any;
+    metadata?: unknown;
   }): Promise<string> {
     const id = randomUUID();
     const now = Date.now();
@@ -121,7 +123,7 @@ export class StrategicEvolutionStore {
     await this.pool.withWriteLock((db) => {
       this.prepare(
         db,
-        `INSERT INTO sev_metrics (id, sessionKey, type, value, metadata, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sev_metrics (id, sessionKey, type, value, metadata, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
       ).run(id, params.sessionKey, params.type, params.value, metadataStr, now);
     });
 
@@ -137,7 +139,7 @@ export class StrategicEvolutionStore {
          VALUES (?, ?, 1, ?)
          ON CONFLICT(sessionKey, lineHash) DO UPDATE SET
          hitCount = hitCount + 1,
-         lastRecallTs = ?`
+         lastRecallTs = ?`,
       ).run(sessionKey, lineHash, now, now);
     });
   }
@@ -146,7 +148,7 @@ export class StrategicEvolutionStore {
     const db = this.pool.acquireRead();
     const row = this.prepare(
       db,
-      `SELECT hitCount FROM sev_recall_hits WHERE sessionKey = ? AND lineHash = ?`
+      `SELECT hitCount FROM sev_recall_hits WHERE sessionKey = ? AND lineHash = ?`,
     ).get(sessionKey, lineHash) as { hitCount: number } | undefined;
     return row?.hitCount ?? 0;
   }
@@ -157,7 +159,7 @@ export class StrategicEvolutionStore {
     limit?: number;
   }): StoredMetric[] {
     let sql = `SELECT * FROM sev_metrics WHERE sessionKey = ?`;
-    const args: any[] = [params.sessionKey];
+    const args: (string | number)[] = [params.sessionKey];
 
     if (params.type) {
       sql += ` AND type = ?`;
@@ -168,31 +170,34 @@ export class StrategicEvolutionStore {
     args.push(params.limit ?? 50);
 
     const db = this.pool.acquireRead();
-    return this.prepare(db, sql).all(...args) as StoredMetric[];
+    return this.prepare(db, sql).all(...args) as unknown as StoredMetric[];
   }
 
-  public getStats(params: {
-    sessionKey: string;
-    type: MetricType;
-  }): { mean: number; stdDev: number; count: number } {
+  public getStats(params: { sessionKey: string; type: MetricType }): {
+    mean: number;
+    stdDev: number;
+    count: number;
+  } {
     const db = this.pool.acquireRead();
     const rows = this.prepare(
       db,
-      `SELECT value FROM sev_metrics WHERE sessionKey = ? AND type = ? ORDER BY createdAt DESC LIMIT 100`
+      `SELECT value FROM sev_metrics WHERE sessionKey = ? AND type = ? ORDER BY createdAt DESC LIMIT 100`,
     ).all(params.sessionKey, params.type) as { value: number }[];
 
-    if (rows.length === 0) return { mean: 0, stdDev: 0, count: 0 };
+    if (rows.length === 0) {
+      return { mean: 0, stdDev: 0, count: 0 };
+    }
 
-    const values = rows.map(r => r.value);
+    const values = rows.map((r) => r.value);
     const count = values.length;
     const mean = values.reduce((a, b) => a + b, 0) / count;
-    const sqDiffs = values.map(v => Math.pow(v - mean, 2));
+    const sqDiffs = values.map((v) => Math.pow(v - mean, 2));
     const stdDev = Math.sqrt(sqDiffs.reduce((a, b) => a + b, 0) / count);
 
     return { mean, stdDev, count };
   }
 
-  public async setSessionState(sessionKey: string, key: string, value: any): Promise<void> {
+  public async setSessionState(sessionKey: string, key: string, value: unknown): Promise<void> {
     const now = Date.now();
     const valStr = typeof value === "string" ? value : JSON.stringify(value);
     await this.pool.withWriteLock((db) => {
@@ -202,20 +207,25 @@ export class StrategicEvolutionStore {
          VALUES (?, ?, ?, ?)
          ON CONFLICT(sessionKey, stateKey) DO UPDATE SET
          stateValue = excluded.stateValue,
-         updatedAt = excluded.updatedAt`
+         updatedAt = excluded.updatedAt`,
       ).run(sessionKey, key, valStr, now);
     });
   }
 
-  public getSessionState<T = any>(sessionKey: string, key: string): T | null {
+  public getSessionState<T = unknown>(sessionKey: string, key: string): T | null {
     const db = this.pool.acquireRead();
     const row = this.prepare(
       db,
-      `SELECT stateValue FROM sev_session_state WHERE sessionKey = ? AND stateKey = ?`
+      `SELECT stateValue FROM sev_session_state WHERE sessionKey = ? AND stateKey = ?`,
     ).get(sessionKey, key);
 
-    if (!row) return null;
-    const val = (row as any).stateValue;
+    if (!row) {
+      return null;
+    }
+    const val = (row as Record<string, unknown>).stateValue;
+    if (typeof val !== "string") {
+      return val as T;
+    }
     try {
       return JSON.parse(val) as T;
     } catch {
@@ -229,7 +239,7 @@ export class StrategicEvolutionStore {
         db,
         `INSERT OR REPLACE INTO sev_bash_history (
           id, command, scopeKey, sessionKey, startedAt, endedAt, cwd, status, exitCode, exitSignal, aggregated, tail, truncated, totalOutputChars
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         session.id,
         session.command,
@@ -244,7 +254,7 @@ export class StrategicEvolutionStore {
         session.aggregated,
         session.tail,
         session.truncated ? 1 : 0,
-        session.totalOutputChars
+        session.totalOutputChars,
       );
     });
   }
@@ -253,24 +263,24 @@ export class StrategicEvolutionStore {
     const db = this.pool.acquireRead();
     const rows = this.prepare(
       db,
-      `SELECT * FROM sev_bash_history ORDER BY endedAt DESC LIMIT ?`
+      `SELECT * FROM sev_bash_history ORDER BY endedAt DESC LIMIT ?`,
     ).all(limit);
 
-    return (rows as any[]).map((row) => ({
-      id: row.id,
-      command: row.command,
-      scopeKey: row.scopeKey,
-      sessionKey: row.sessionKey,
-      startedAt: row.startedAt,
-      endedAt: row.endedAt,
-      cwd: row.cwd,
-      status: row.status,
-      exitCode: row.exitCode,
-      exitSignal: row.exitSignal,
-      aggregated: row.aggregated,
-      tail: row.tail,
+    return (rows as Record<string, unknown>[]).map((row) => ({
+      id: String(row.id),
+      command: String(row.command),
+      scopeKey: row.scopeKey as string | undefined,
+      sessionKey: row.sessionKey as string | undefined,
+      startedAt: Number(row.startedAt),
+      endedAt: Number(row.endedAt),
+      cwd: row.cwd as string | undefined,
+      status: String(row.status),
+      exitCode: row.exitCode as number | undefined,
+      exitSignal: row.exitSignal as string | number | undefined,
+      aggregated: String(row.aggregated),
+      tail: String(row.tail),
       truncated: Boolean(row.truncated),
-      totalOutputChars: row.totalOutputChars,
+      totalOutputChars: Number(row.totalOutputChars),
     }));
   }
 
@@ -284,15 +294,19 @@ export class StrategicEvolutionStore {
 
 let _defaultStore: StrategicEvolutionStore | null = null;
 
-export async function getStrategicEvolutionStore(dbPath?: string): Promise<StrategicEvolutionStore> {
-  if (_defaultStore) return _defaultStore;
+export async function getStrategicEvolutionStore(
+  dbPath?: string,
+): Promise<StrategicEvolutionStore> {
+  if (_defaultStore) {
+    return _defaultStore;
+  }
 
   const resolvedPath =
     dbPath ??
     path.join(
       process.env.OPENCLAW_STATE_DIR ?? path.join(process.env.HOME ?? "/tmp", ".openclaw"),
       "evolution",
-      "strategic.sqlite"
+      "strategic.sqlite",
     );
 
   try {
@@ -309,11 +323,8 @@ export async function getStrategicEvolutionStore(dbPath?: string): Promise<Strat
 }
 
 export function resetStrategicEvolutionStoreForTest(): void {
-  const store = _defaultStore as any;
+  const store = _defaultStore;
   if (store) {
-    try {
-      store.pool?.close?.();
-    } catch {}
     _defaultStore = null;
   }
 }

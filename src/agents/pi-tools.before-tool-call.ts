@@ -165,7 +165,7 @@ export async function runBeforeToolCallHook(args: {
   try {
     const { evaluateToolCall } = await import("./joy-zoning.policy.js");
     const { getTargetPaths } = await import("../utils/joy-zoning.js");
-    const normalizedParams = isPlainObject(params) ? (params as Record<string, unknown>) : {};
+    const normalizedParams = isPlainObject(params) ? params : {};
     const { filePath, newPath } = getTargetPaths(normalizedParams);
 
     if (filePath || newPath) {
@@ -178,7 +178,9 @@ export async function runBeforeToolCallHook(args: {
         content,
         sessionKey: args.ctx?.sessionKey,
         agentId: args.ctx?.agentId,
-        thought: (normalizedParams as any).thought || (normalizedParams as any).message, // Heuristic for thought capture
+        thought: String(
+          (normalizedParams["thought"] as string) || (normalizedParams["message"] as string) || "",
+        ), // Heuristic for thought capture
       });
       if (jzResult) {
         if (jzResult.level === "block") {

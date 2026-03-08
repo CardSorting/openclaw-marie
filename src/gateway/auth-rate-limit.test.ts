@@ -1,7 +1,7 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN,
   AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET,
@@ -9,20 +9,25 @@ import {
   type AuthRateLimiter,
 } from "./auth-rate-limit.js";
 
-const testDbPath = path.join(os.tmpdir(), `auth-rate-limit-test-${Math.random().toString(36).slice(2)}.sqlite`);
+const testDbPath = path.join(
+  os.tmpdir(),
+  `auth-rate-limit-test-${Math.random().toString(36).slice(2)}.sqlite`,
+);
 
 // Mocking the store to use a temporary database
 vi.mock("../agents/strategic-evolution-store.js", async (importOriginal) => {
-  const actual = await importOriginal<any>();
+  const actual = await importOriginal<Record<string, unknown>>();
   return {
-    ...actual,
-    getStrategicEvolutionStore: vi.fn(() => actual.getStrategicEvolutionStore(testDbPath)),
+    ...(actual as object),
+    getStrategicEvolutionStore: vi.fn(() =>
+      (
+        actual as { getStrategicEvolutionStore: (path: string) => unknown }
+      ).getStrategicEvolutionStore(testDbPath),
+    ),
   };
 });
 
-import { 
-  resetStrategicEvolutionStoreForTest 
-} from "../agents/strategic-evolution-store.js";
+import { resetStrategicEvolutionStoreForTest } from "../agents/strategic-evolution-store.js";
 
 describe("auth rate limiter", () => {
   let limiter: AuthRateLimiter;
@@ -99,7 +104,11 @@ describe("auth rate limiter", () => {
   it("expires old failures outside the window", async () => {
     vi.useFakeTimers();
     try {
-      limiter = await createAuthRateLimiter({ maxAttempts: 3, windowMs: 10_000, lockoutMs: 60_000 });
+      limiter = await createAuthRateLimiter({
+        maxAttempts: 3,
+        windowMs: 10_000,
+        lockoutMs: 60_000,
+      });
       await limiter.recordFailure("10.0.0.4");
       await limiter.recordFailure("10.0.0.4");
       expect(limiter.check("10.0.0.4").remaining).toBe(1);

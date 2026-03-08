@@ -1,7 +1,7 @@
-import { requireNodeSqlite, type DatabaseSync } from "./sqlite.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
 import fs from "node:fs";
 import path from "node:path";
+import { createSubsystemLogger } from "../logging/subsystem.js";
+import { requireNodeSqlite, type DatabaseSync } from "./sqlite.js";
 
 const log = createSubsystemLogger("memory/sqlite-pool");
 
@@ -33,8 +33,12 @@ export class SqliteConnectionPool {
   private initPromise: Promise<void> | null = null;
 
   public async initialize(): Promise<void> {
-    if (this.initialized) return;
-    if (this.initPromise) return this.initPromise;
+    if (this.initialized) {
+      return;
+    }
+    if (this.initPromise) {
+      return this.initPromise;
+    }
 
     this.initPromise = (async () => {
       try {
@@ -58,17 +62,23 @@ export class SqliteConnectionPool {
             this.setupConnection(db);
             this.connections.push(db);
           } catch (err) {
-            log.error(`Failed to open SQLite connection ${i} at ${this.config.dbPath}: ${err instanceof Error ? err.message : String(err)}`);
+            log.error(
+              `Failed to open SQLite connection ${i} at ${this.config.dbPath}: ${err instanceof Error ? err.message : String(err)}`,
+            );
             throw err;
           }
         }
 
         if (this.connections.length === 0) {
-          throw new Error(`Failed to initialize SQLite pool: no connections established for ${this.config.dbPath}`);
+          throw new Error(
+            `Failed to initialize SQLite pool: no connections established for ${this.config.dbPath}`,
+          );
         }
 
         this.initialized = true;
-        log.info(`Initialized SQLite pool at ${this.config.dbPath} with ${this.connections.length} connections.`);
+        log.info(
+          `Initialized SQLite pool at ${this.config.dbPath} with ${this.connections.length} connections.`,
+        );
       } catch (err) {
         this.initPromise = null; // Allow retry on failure
         throw err;
@@ -94,7 +104,7 @@ export class SqliteConnectionPool {
     if (!this.initialized) {
       throw new Error(`SqliteConnectionPool not initialized. Path: ${this.config.dbPath}`);
     }
-    
+
     const conn = this.connections[this.readIndex];
     this.readIndex = (this.readIndex + 1) % this.connections.length;
     return conn;
@@ -104,7 +114,9 @@ export class SqliteConnectionPool {
    * Execute a write operation protected by the WriteMutex.
    */
   public async withWriteLock<T>(op: (db: DatabaseSync) => T): Promise<T> {
-    if (!this.initialized) await this.initialize();
+    if (!this.initialized) {
+      await this.initialize();
+    }
     await this.writeMutex.lock();
     try {
       // Writes always use the first connection ("Master") to minimize fragmentation/lock contention

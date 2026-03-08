@@ -1,6 +1,6 @@
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { SqliteConnectionPool, getGlobalSqlitePool } from "../memory/sqlite-pool.js";
 
@@ -35,11 +35,11 @@ export class SecurityAuditStore {
 
   constructor(pool: SqliteConnectionPool) {
     this.pool = pool;
-    this.initialize();
+    void this.initialize();
   }
 
-  private initialize(): void {
-    this.pool.withWriteLock((db) => {
+  private async initialize(): Promise<void> {
+    await this.pool.withWriteLock((db) => {
       db.exec(SCHEMA_SQL);
     });
   }
@@ -56,7 +56,7 @@ export class SecurityAuditStore {
     await this.pool.transaction((db) => {
       db.prepare(
         `INSERT INTO security_findings (id, category, severity, description, matchSnippet, context, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         params.category,
@@ -64,7 +64,7 @@ export class SecurityAuditStore {
         params.description,
         params.matchSnippet ?? null,
         params.context ?? null,
-        now
+        now,
       );
     });
     log.info(`Recorded security finding: [${params.category}] ${params.description}`);
@@ -73,9 +73,9 @@ export class SecurityAuditStore {
 
   getRecentFindings(limit = 50): SecurityFindingEntry[] {
     const db = this.pool.acquireRead();
-    return db.prepare(
-      `SELECT * FROM security_findings ORDER BY timestamp DESC LIMIT ?`
-    ).all(limit) as SecurityFindingEntry[];
+    return db
+      .prepare(`SELECT * FROM security_findings ORDER BY timestamp DESC LIMIT ?`)
+      .all(limit) as SecurityFindingEntry[];
   }
 
   /**
@@ -83,30 +83,39 @@ export class SecurityAuditStore {
    * This should be called on session end or when the store is closed.
    */
   async seal(): Promise<void> {
-    const poolAny = this.pool as any;
-    const dbPath = poolAny.options?.dbPath || poolAny.dbPath; 
-    if (!dbPath || dbPath === ":memory:") return;
+    const poolAny = this.pool as unknown as { options?: { dbPath?: string }; dbPath?: string };
+    const dbPath = poolAny.options?.dbPath || poolAny.dbPath;
+    if (!dbPath || dbPath === ":memory:") {
+      return;
+    }
 
     const ageKey = process.env.OPENCLAW_AGE_SECRET_KEY;
     if (!ageKey) {
-        log.warn("Forensic seal skipped: OPENCLAW_AGE_SECRET_KEY not set.");
-        return;
+      log.warn("Forensic seal skipped: OPENCLAW_AGE_SECRET_KEY not set.");
+      return;
     }
 
     log.info(`Forensically sealing audit log at ${dbPath}...`);
-    
+
     return new Promise((resolve, reject) => {
-        const encryptedPath = `${dbPath}.age`;
-        const child = spawn("age", ["--encrypt", "--recipient", ageKey, "--output", encryptedPath, dbPath]);
-        
-        child.on("close", (code) => {
-            if (code === 0) {
-                log.info(`Audit log sealed and encrypted at ${encryptedPath}`);
-                resolve();
-            } else {
-                reject(new Error(`Forensic seal failed with code ${code}`));
-            }
-        });
+      const encryptedPath = `${dbPath}.age`;
+      const child = spawn("age", [
+        "--encrypt",
+        "--recipient",
+        ageKey,
+        "--output",
+        encryptedPath,
+        dbPath,
+      ]);
+
+      child.on("close", (code) => {
+        if (code === 0) {
+          log.info(`Audit log sealed and encrypted at ${encryptedPath}`);
+          resolve();
+        } else {
+          reject(new Error(`Forensic seal failed with code ${code}`));
+        }
+      });
     });
   }
 }
@@ -114,14 +123,16 @@ export class SecurityAuditStore {
 let _defaultStore: SecurityAuditStore | null = null;
 
 export function getSecurityAuditStore(dbPath?: string): SecurityAuditStore {
-  if (_defaultStore) return _defaultStore;
+  if (_defaultStore) {
+    return _defaultStore;
+  }
 
   const resolvedPath =
     dbPath ??
     path.join(
       process.env.OPENCLAW_STATE_DIR ?? path.join(process.env.HOME ?? "/tmp", ".openclaw"),
       "security",
-      "audit.sqlite"
+      "audit.sqlite",
     );
 
   try {
@@ -129,7 +140,9 @@ export function getSecurityAuditStore(dbPath?: string): SecurityAuditStore {
     _defaultStore = new SecurityAuditStore(pool);
     return _defaultStore;
   } catch (err) {
-    log.warn(`Failed to open security audit store: ${err instanceof Error ? err.message : String(err)}`);
+    log.warn(
+      `Failed to open security audit store: ${err instanceof Error ? err.message : String(err)}`,
+    );
     throw err;
   }
 }

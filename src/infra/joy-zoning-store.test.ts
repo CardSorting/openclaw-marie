@@ -120,7 +120,9 @@ describe("JoyZoningStore", () => {
     });
 
     it("returns top strikers", async () => {
-      for (let i = 0; i < 3; i++) await store.getOrIncrementStrike("src/config/many.ts");
+      for (let i = 0; i < 3; i++) {
+        await store.getOrIncrementStrike("src/config/many.ts");
+      }
       await store.getOrIncrementStrike("src/config/one.ts");
 
       const top = store.getTopStrikes(5);

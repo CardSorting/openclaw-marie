@@ -89,7 +89,9 @@ export function getLayer(filePath: string): JoyZoningLayer {
       }
     }
   }
-  if (bestMatch) return bestMatch.layer;
+  if (bestMatch) {
+    return bestMatch.layer;
+  }
 
   // Default to Core if in src, otherwise Plumbing
   if (normalizedPath.startsWith("src/")) {
@@ -148,7 +150,9 @@ export function validateSmells(filePath: string, content: string): string[] {
   // Forbidden 'any' type — Domain and Infrastructure only
   if (layer === "Domain" || layer === "Infrastructure") {
     if (codeOnly.includes(": any") || codeOnly.includes("<any>")) {
-      errors.push(`⚠️ DISCERNMENT WARNING: ${basename}: 'any' type detected — use a typed interface or generic.`);
+      errors.push(
+        `⚠️ DISCERNMENT WARNING: ${basename}: 'any' type detected — use a typed interface or generic.`,
+      );
     }
   }
 
@@ -187,45 +191,72 @@ export function detectCrossLayerImports(content: string, layer: JoyZoningLayer):
   const violations: string[] = [];
   const codeOnly = sanitizeForImportCheck(content);
 
-  const infraPaths = "(?:\\.\\.\\/infra|\\.\\.\\/infrastructure|\\.\\.\\/browser|\\.\\.\\/gateway|\\.\\.\\/providers|\\.\\.\\/secrets|\\.\\.\\/security|\\.\\.\\/web)";
-  const uiPaths = "(?:\\.\\.\\/ui|\\.\\.\\/slack|\\.\\.\\/telegram|\\.\\.\\/discord|\\.\\.\\/tui|\\.\\.\\/channels|\\.\\.\\/terminal|\\.\\.\\/cli|\\.\\.\\/whatsapp|\\.\\.\\/imessage|\\.\\.\\/line|\\.\\.\\/signal|\\.\\.\\/wizard)";
-  const appPaths = "(?:\\.\\.\\/agents|\\.\\.\\/config|\\.\\.\\/types|\\.\\.\\/infra|\\.\\.\\/browser|\\.\\.\\/gateway|\\.\\.\\/providers|\\.\\.\\/secrets|\\.\\.\\/security|\\.\\.\\/web|\\.\\.\\/slack|\\.\\.\\/telegram|\\.\\.\\/discord|\\.\\.\\/channels|\\.\\.\\/tui|\\.\\.\\/terminal|\\.\\.\\/cli)";
+  const infraPaths =
+    "(?:\\.\\.\\/infra|\\.\\.\\/infrastructure|\\.\\.\\/browser|\\.\\.\\/gateway|\\.\\.\\/providers|\\.\\.\\/secrets|\\.\\.\\/security|\\.\\.\\/web)";
+  const uiPaths =
+    "(?:\\.\\.\\/ui|\\.\\.\\/slack|\\.\\.\\/telegram|\\.\\.\\/discord|\\.\\.\\/tui|\\.\\.\\/channels|\\.\\.\\/terminal|\\.\\.\\/cli|\\.\\.\\/whatsapp|\\.\\.\\/imessage|\\.\\.\\/line|\\.\\.\\/signal|\\.\\.\\/wizard)";
+  const appPaths =
+    "(?:\\.\\.\\/agents|\\.\\.\\/config|\\.\\.\\/types|\\.\\.\\/infra|\\.\\.\\/browser|\\.\\.\\/gateway|\\.\\.\\/providers|\\.\\.\\/secrets|\\.\\.\\/security|\\.\\.\\/web|\\.\\.\\/slack|\\.\\.\\/telegram|\\.\\.\\/discord|\\.\\.\\/channels|\\.\\.\\/tui|\\.\\.\\/terminal|\\.\\.\\/cli)";
 
   if (layer === "Domain") {
     // 1. Concrete Imports (Zero-Value Threshold)
-    const concreteImportRegex = new RegExp(`(?:import|export)(?!\\s+type\\s+).*?from\\s+['"]${infraPaths}.*?['"]`, "i");
+    const concreteImportRegex = new RegExp(
+      `(?:import|export)(?!\\s+type\\s+).*?from\\s+['"]${infraPaths}.*?['"]`,
+      "i",
+    );
     if (concreteImportRegex.test(codeOnly)) {
-      violations.push("DOMAIN PURITY: Domain layer cannot import concrete values from Infrastructure. Use 'import type' and dependency inversion.");
+      violations.push(
+        "DOMAIN PURITY: Domain layer cannot import concrete values from Infrastructure. Use 'import type' and dependency inversion.",
+      );
     }
 
     // 2. Dynamic Imports / Require evasion
-    const dynamicEvasionRegex = new RegExp(`(?:import|require)\\s*\\(\\s*['"]${infraPaths}.*?['"]\\s*\\)`, "i");
+    const dynamicEvasionRegex = new RegExp(
+      `(?:import|require)\\s*\\(\\s*['"]${infraPaths}.*?['"]\\s*\\)`,
+      "i",
+    );
     if (dynamicEvasionRegex.test(codeOnly)) {
-      violations.push("DOMAIN PURITY: Dynamic imports or 'require' from Infrastructure are blocked in Domain.");
+      violations.push(
+        "DOMAIN PURITY: Dynamic imports or 'require' from Infrastructure are blocked in Domain.",
+      );
     }
 
     // 3. Platform leakage (Node.js builtins)
-    const nodeBuiltinRegex = /(?:import|export|require).*?['"](?:node:)?(?:fs|path|os|child_process|http|https|net|dgram|cluster)['"]/i;
+    const nodeBuiltinRegex =
+      /(?:import|export|require).*?['"](?:node:)?(?:fs|path|os|child_process|http|https|net|dgram|cluster)['"]/i;
     if (nodeBuiltinRegex.test(codeOnly)) {
-      violations.push("PLATFORM LEAKAGE: Domain layer must not depend on platform-specific modules.");
+      violations.push(
+        "PLATFORM LEAKAGE: Domain layer must not depend on platform-specific modules.",
+      );
     }
 
     // 4. UI imports (Zero-Value Threshold)
-    const concreteUiRegex = new RegExp(`(?:import|export)(?!\\s+type\\s+).*?from\\s+['"]${uiPaths}.*?['"]`, "i");
+    const concreteUiRegex = new RegExp(
+      `(?:import|export)(?!\\s+type\\s+).*?from\\s+['"]${uiPaths}.*?['"]`,
+      "i",
+    );
     if (concreteUiRegex.test(codeOnly)) {
-      violations.push("DOMAIN PURITY: Domain layer cannot import concrete values from UI. Domain must be platform-agnostic (use 'import type').");
+      violations.push(
+        "DOMAIN PURITY: Domain layer cannot import concrete values from UI. Domain must be platform-agnostic (use 'import type').",
+      );
     }
   }
 
   if (layer === "Plumbing") {
-    const plumbingDepRegex = new RegExp(`(?:import|export|require).*?from\\s+['"]${appPaths}.*?['"]`, "i");
+    const plumbingDepRegex = new RegExp(
+      `(?:import|export|require).*?from\\s+['"]${appPaths}.*?['"]`,
+      "i",
+    );
     if (plumbingDepRegex.test(codeOnly)) {
       violations.push("Plumbing/Utils should have zero dependencies on application layers.");
     }
   }
 
   if (layer === "Infrastructure") {
-    const infraUiRegex = new RegExp(`(?:import|export|require).*?from\\s+['"]${uiPaths}.*?['"]`, "i");
+    const infraUiRegex = new RegExp(
+      `(?:import|export|require).*?from\\s+['"]${uiPaths}.*?['"]`,
+      "i",
+    );
     if (infraUiRegex.test(codeOnly)) {
       violations.push("Infrastructure layer cannot import from UI — use events or callbacks.");
     }
@@ -244,7 +275,9 @@ export function validateDependency(sourcePath: string, targetPath: string): stri
   const sourceLayer = getLayer(sourcePath);
   const targetLayer = getLayer(targetPath);
 
-  if (sourceLayer === targetLayer) return null;
+  if (sourceLayer === targetLayer) {
+    return null;
+  }
 
   if (sourceLayer === "Domain" && targetLayer !== "Plumbing") {
     return `Architectural Violation: Domain layer (${path.basename(sourcePath)}) should not depend on ${targetLayer} (${path.basename(targetPath)})`;
@@ -339,7 +372,9 @@ export function getTargetPaths(params: Record<string, unknown> | null | undefine
   filePath: string | null;
   newPath: string | null;
 } {
-  if (!params) return { filePath: null, newPath: null };
+  if (!params) {
+    return { filePath: null, newPath: null };
+  }
 
   const filePath =
     (params.path as string) ??
@@ -351,7 +386,9 @@ export function getTargetPaths(params: Record<string, unknown> | null | undefine
     (params.oldPath as string);
 
   const newPath =
-    (params.newPath as string) ?? (params.destinationPath as string) ?? (params.targetPath as string);
+    (params.newPath as string) ??
+    (params.destinationPath as string) ??
+    (params.targetPath as string);
 
   return {
     filePath: typeof filePath === "string" ? filePath : null,
@@ -393,27 +430,43 @@ export function getCorrectionHint(errors: string[]): string {
   const fixes: string[] = [];
   for (const err of errors) {
     if (err.includes("DOMAIN PURITY")) {
-      fixes.push("Use 'import type' and dependency inversion. Domain must only know about interfaces, not concrete implementations.");
+      fixes.push(
+        "Use 'import type' and dependency inversion. Domain must only know about interfaces, not concrete implementations.",
+      );
     } else if (err.includes("Dynamic imports") || err.includes("require")) {
-      fixes.push("Avoid dynamic import/require for application layers. Use static imports or event-to-handler mapping.");
+      fixes.push(
+        "Avoid dynamic import/require for application layers. Use static imports or event-to-handler mapping.",
+      );
     } else if (err.includes("UI")) {
-      fixes.push("Use Gateway events or observer patterns to notify the UI instead of direct imports.");
+      fixes.push(
+        "Use Gateway events or observer patterns to notify the UI instead of direct imports.",
+      );
     } else if (err.includes("QUARANTINE") || err.includes("TAINTED")) {
-      fixes.push("The target file has excessive architectural debt. Refactor the target file's violates before importing it here.");
+      fixes.push(
+        "The target file has excessive architectural debt. Refactor the target file's violates before importing it here.",
+      );
     } else if (err.includes("PLATFORM LEAKAGE")) {
-      fixes.push("Wrap platform-specific code in an Infrastructure adapter. Domain must be platform-agnostic.");
+      fixes.push(
+        "Wrap platform-specific code in an Infrastructure adapter. Domain must be platform-agnostic.",
+      );
     } else if (err.includes("Mega-File")) {
       fixes.push("Decompose this module into smaller, specialized files within the same layer.");
     } else if (err.includes("ARCHITECTURAL CYCLE")) {
-      fixes.push("Break the circle: move shared logic to Plumbing, or use interfaces in a higher layer.");
+      fixes.push(
+        "Break the circle: move shared logic to Plumbing, or use interfaces in a higher layer.",
+      );
     } else if (err.includes("Forbidden call")) {
-      fixes.push("Move the I/O call to an Infrastructure adapter. Inject via dependency inversion.");
+      fixes.push(
+        "Move the I/O call to an Infrastructure adapter. Inject via dependency inversion.",
+      );
     } else if (err.includes("any")) {
       fixes.push("Replace 'any' with a typed interface or generic.");
     }
   }
-  if (fixes.length === 0) fixes.push("Review the violations and restructure according to Joy-Zoning rules.");
-  
+  if (fixes.length === 0) {
+    fixes.push("Review the violations and restructure according to Joy-Zoning rules.");
+  }
+
   const uniqueFixes = [...new Set(fixes)];
   return `💡 Architectural Guidance:\n${uniqueFixes.map((f) => `  → ${f}`).join("\n")}`;
 }

@@ -18,9 +18,9 @@ export class SessionHistorySearch {
   /**
    * Index a session's messages for FTS5 search.
    */
-  async indexSession(sessionId: string, messages: any[]): Promise<void> {
+  async indexSession(_sessionId: string, _messages: unknown[]): Promise<void> {
     // Placeholder: SQLite FTS5 indexing logic
-    log.info(`Indexed session history for ${sessionId}`);
+    log.info(`Indexed session history for ${_sessionId}`);
   }
 
   /**
@@ -35,8 +35,8 @@ export class SessionHistorySearch {
   /**
    * Create a frozen summary of a session at its close.
    */
-  async snapshotSessionSummary(sessionId: string, summary: string): Promise<void> {
+  async snapshotSessionSummary(_sessionId: string, _summary: string): Promise<void> {
     // Store frozen summary in SQLite
-    log.info(`Saved frozen summary for session ${sessionId}`);
+    log.info(`Saved frozen summary for session ${_sessionId}`);
   }
 }

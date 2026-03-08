@@ -1,11 +1,14 @@
-
 import { describe, it, expect, beforeEach } from "vitest";
+import {
+  evaluateToolCall,
+  setStoreForTest,
+  type JoyZoningViolation,
+} from "../src/agents/joy-zoning.policy.ts";
+import { createInMemoryStore, type JoyZoningStore } from "../src/infra/joy-zoning-store.ts";
 import { validateJoyZoning, detectCrossLayerImports } from "../src/utils/joy-zoning.js";
-import { evaluateToolCall, setStoreForTest, type JoyZoningViolation } from "../src/agents/joy-zoning.policy.ts";
-import { createInMemoryStore } from "../src/infra/joy-zoning-store.js";
 
 describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
-  let store: any;
+  let store: JoyZoningStore;
 
   beforeEach(() => {
     store = createInMemoryStore();
@@ -22,13 +25,17 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
     it("should block concrete 'import' from Infrastructure into Domain", () => {
       const content = "import { DBClient } from '../infra/db';";
       const violations = detectCrossLayerImports(content, "Domain");
-      expect(violations).toContain("DOMAIN PURITY: Domain layer cannot import concrete values from Infrastructure. Use 'import type' and dependency inversion.");
+      expect(violations).toContain(
+        "DOMAIN PURITY: Domain layer cannot import concrete values from Infrastructure. Use 'import type' and dependency inversion.",
+      );
     });
 
     it("should block concrete 'import' from UI into Domain", () => {
       const content = "import { Button } from '../ui/components';";
       const violations = detectCrossLayerImports(content, "Domain");
-      expect(violations[0]).toMatch(/DOMAIN PURITY: Domain layer cannot import concrete values from UI/);
+      expect(violations[0]).toMatch(
+        /DOMAIN PURITY: Domain layer cannot import concrete values from UI/,
+      );
     });
   });
 
@@ -41,19 +48,24 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
     it("should detect complex 3-file cycles (A -> B -> C -> A)", async () => {
       await store.recordDependency("src/domain/a.ts", "src/domain/b.ts");
       await store.recordDependency("src/domain/b.ts", "src/domain/c.ts");
-      
+
       const cycle = store.detectCycle("src/domain/c.ts", "src/domain/a.ts");
-      expect(cycle).toEqual(["src/domain/c.ts", "src/domain/a.ts", "src/domain/b.ts", "src/domain/c.ts"]);
+      expect(cycle).toEqual([
+        "src/domain/c.ts",
+        "src/domain/a.ts",
+        "src/domain/b.ts",
+        "src/domain/c.ts",
+      ]);
     });
 
     it("should block tool calls that create cycles", async () => {
       await store.recordDependency("src/domain/a.ts", "src/domain/b.ts");
-      
+
       const res = evaluateToolCall({
         toolName: "edit",
         filePath: "src/domain/b.ts",
         importPaths: ["src/domain/a.ts"],
-        sessionKey: "cycle-test"
+        sessionKey: "cycle-test",
       });
 
       expect(res?.level).toBe("block");
@@ -69,11 +81,11 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         content: "import { raw } from '../infra/db';", // Content violation
         sessionKey: "attr-test",
         agentId: "agent-007",
-        thought: "I need this db connection directly for speed."
+        thought: "I need this db connection directly for speed.",
       });
 
       // Allow for async persistence
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const violations = store.getRecentViolations("attr-test");
       expect(violations[0].agentId).toBe("agent-007");
@@ -86,9 +98,9 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
       const res = evaluateToolCall({
         toolName: "edit",
         filePath: "src/domain/logic.ts",
-        content: "import { raw } from '../infra/db';", 
+        content: "import { raw } from '../infra/db';",
         sessionKey: "override-test",
-        thought: "I know this is bad but [JZ:OVERRIDE] I am in a hurry."
+        thought: "I know this is bad but [JZ:OVERRIDE] I am in a hurry.",
       });
 
       expect(res?.level).toBe("warning");
@@ -98,7 +110,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
     it("should flag Mega-Files (> 500 lines)", () => {
       const megaContent = "// line\n".repeat(501);
       const res = validateJoyZoning("src/domain/big.ts", megaContent);
-      expect(res.errors.some(e => e.includes("Mega-File"))).toBe(true);
+      expect(res.errors.some((e) => e.includes("Mega-File"))).toBe(true);
     });
   });
 
@@ -109,7 +121,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
           toolName: "edit",
           filePath: "src/agents/joy-zoning.policy.ts",
           content: "console.log('tampered');",
-          sessionKey: "test-self"
+          sessionKey: "test-self",
         });
         expect(res?.level).toBe("block");
         expect(res?.message).toContain("SELF-PRESERVATION");
@@ -120,7 +132,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
           toolName: "edit",
           filePath: "src/infra/joy-zoning-store.ts",
           content: "DELETE FROM jz_violations;",
-          sessionKey: "test-self"
+          sessionKey: "test-self",
         });
         expect(res?.level).toBe("block");
         expect(res?.message).toContain("SELF-PRESERVATION");
@@ -132,7 +144,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         const res = evaluateToolCall({
           toolName: "delete_file",
           filePath: "src/domain/critical-logic.ts",
-          sessionKey: "test-delete"
+          sessionKey: "test-delete",
         });
         expect(res?.level).toBe("block");
         expect(res?.message).toContain("DESTRUCTION PREVENTION");
@@ -142,7 +154,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         const res = evaluateToolCall({
           toolName: "remove_file",
           filePath: "src/core/agent-orchestrator.ts",
-          sessionKey: "test-delete"
+          sessionKey: "test-delete",
         });
         expect(res?.level).toBe("block");
         expect(res?.message).toContain("DESTRUCTION PREVENTION");
@@ -152,7 +164,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         const res = evaluateToolCall({
           toolName: "delete_file",
           filePath: "src/ui/old-button.tsx",
-          sessionKey: "test-delete"
+          sessionKey: "test-delete",
         });
         expect(res).toBeNull();
       });
@@ -163,8 +175,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         const res = evaluateToolCall({
           toolName: "bash",
           command: "rm -rf src/domain",
-          sessionKey: "test-bash"
-        } as any);
+          sessionKey: "test-bash",
+        } as Parameters<typeof evaluateToolCall>[0]);
         expect(res?.level).toBe("block");
         expect(res?.message).toContain("DESTRUCTIVE BASH INTERCEPTED");
       });
@@ -173,8 +185,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         const res = evaluateToolCall({
           toolName: "run_command",
           command: "mv src/domain/Logic.ts src/plumbing/Logic.ts",
-          sessionKey: "test-bash"
-        } as any);
+          sessionKey: "test-bash",
+        } as Parameters<typeof evaluateToolCall>[0]);
         expect(res?.level).toBe("block");
         expect(res?.message).toContain("DESTRUCTIVE BASH INTERCEPTED");
       });
@@ -186,7 +198,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
           toolName: "move",
           filePath: "src/domain/MyPolicy.ts",
           newPath: "src/infrastructure/MyPolicy.ts",
-          sessionKey: "test-move"
+          sessionKey: "test-move",
         });
         expect(res?.level).toBe("block");
         expect(res?.message).toContain("LAYER EVASION");
@@ -197,7 +209,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
           toolName: "rename",
           filePath: "src/domain/OldName.ts",
           newPath: "src/domain/NewName.ts",
-          sessionKey: "test-move"
+          sessionKey: "test-move",
         });
         expect(res).toBeNull();
       });
@@ -211,21 +223,27 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
           DBClient
         } from '../infra/db';`;
         const violations = detectCrossLayerImports(content, "Domain");
-        expect(violations).toContain("DOMAIN PURITY: Domain layer cannot import concrete values from Infrastructure. Use 'import type' and dependency inversion.");
+        expect(violations).toContain(
+          "DOMAIN PURITY: Domain layer cannot import concrete values from Infrastructure. Use 'import type' and dependency inversion.",
+        );
       });
 
       it("should block dynamic import() from forbidden layers", () => {
         const content = "const db = await import('../infra/db');";
         const violations = detectCrossLayerImports(content, "Domain");
-        expect(violations).toContain("DOMAIN PURITY: Dynamic imports or 'require' from Infrastructure are blocked in Domain.");
+        expect(violations).toContain(
+          "DOMAIN PURITY: Dynamic imports or 'require' from Infrastructure are blocked in Domain.",
+        );
       });
 
       it("should block require() from forbidden layers", () => {
         const content = "const fs = require('../infra/fs-adapter');";
         const violations = detectCrossLayerImports(content, "Domain");
-        expect(violations).toContain("DOMAIN PURITY: Dynamic imports or 'require' from Infrastructure are blocked in Domain.");
+        expect(violations).toContain(
+          "DOMAIN PURITY: Dynamic imports or 'require' from Infrastructure are blocked in Domain.",
+        );
       });
-      
+
       it("should handle imports with unusual whitespace and comments", () => {
         const content = "import /* bypass attempt */ { val } from \n\n '../infra/db'";
         const violations = detectCrossLayerImports(content, "Domain");
@@ -239,12 +257,12 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         for (let i = 0; i < 11; i++) {
           await store.getOrIncrementStrike(infraPath, "Leaking state");
         }
-        
+
         const res = evaluateToolCall({
           toolName: "edit",
-          filePath: "src/agents/Orchestrator.ts", 
+          filePath: "src/agents/Orchestrator.ts",
           importPaths: [infraPath],
-          sessionKey: "quarantine-test"
+          sessionKey: "quarantine-test",
         });
 
         expect(res?.level).toBe("block");
@@ -257,24 +275,24 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         const tasks = Array.from({ length: 50 }).map((_, i) => {
           return new Promise<JoyZoningViolation | null>((resolve) => {
             setTimeout(() => {
-               const res = evaluateToolCall({
-                  toolName: "edit",
-                  filePath: `src/domain/file-${i}.ts`,
-                  content: ": any", // DISCERNMENT WARNING (now a warning)
-                  sessionKey: "concurrency-session",
-                  agentId: `agent-${i}`
-               });
-               resolve(res);
+              const res = evaluateToolCall({
+                toolName: "edit",
+                filePath: `src/domain/file-${i}.ts`,
+                content: ": any", // DISCERNMENT WARNING (now a warning)
+                sessionKey: "concurrency-session",
+                agentId: `agent-${i}`,
+              });
+              resolve(res);
             }, Math.random() * 50);
           });
         });
 
         const results = await Promise.all(tasks);
-        expect(results.every(r => r !== null)).toBe(true);
-        expect(results.every(r => r?.level === "warning")).toBe(true);
-        
+        expect(results.every((r) => r !== null)).toBe(true);
+        expect(results.every((r) => r?.level === "warning")).toBe(true);
+
         // Wait for persistence
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
 
         const summary = store.getSessionSummary("concurrency-session");
         expect(summary?.warningCount).toBe(50);
@@ -291,7 +309,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
           toolName: "edit",
           filePath,
           content: "import { db } from '../infra/db';",
-          sessionKey
+          sessionKey,
         });
         expect(res1?.level).toBe("block");
         expect(res1?.error_retry).toBe(true);
@@ -302,14 +320,14 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
           toolName: "edit",
           filePath,
           content: "import { db } from '../infra/db';",
-          sessionKey
+          sessionKey,
         });
         expect(res2?.level).toBe("warning");
         expect(res2?.message).toContain("Architectural Warning");
         expect(res2?.message).toContain("(Strike 2)");
 
         // Verify summary
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
         const summary = store.getSessionSummary(sessionKey);
         expect(summary?.blockCount).toBe(1);
         expect(summary?.warningCount).toBe(1);
@@ -320,7 +338,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
           toolName: "edit",
           filePath: "src/domain/any-logic.ts",
           content: "const x: any = 1;",
-          sessionKey: "any-test"
+          sessionKey: "any-test",
         });
         expect(res?.level).toBe("warning");
         expect(res?.message).toContain("DISCERNMENT WARNING");
