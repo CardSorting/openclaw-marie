@@ -215,11 +215,13 @@ function moveToFinished(session: ProcessSession, status: ProcessStatus) {
   };
   finishedSessions.set(session.id, finished);
 
-  try {
-    getStrategicEvolutionStore().saveBashHistory(finished as any);
-  } catch (err) {
-    // Non-fatal, just log if possible
-  }
+  void getStrategicEvolutionStore()
+    .then((store) => {
+      void store
+        .saveBashHistory(finished as unknown as Parameters<typeof store.saveBashHistory>[0])
+        .catch(() => {});
+    })
+    .catch(() => {});
 }
 
 export function tail(text: string, max = 2000) {
@@ -300,9 +302,11 @@ function pruneFinishedSessions() {
       finishedSessions.delete(id);
     }
   }
-  try {
-    getStrategicEvolutionStore().pruneBashHistory(jobTtlMs);
-  } catch {}
+  void getStrategicEvolutionStore()
+    .then((store) => {
+      void store.pruneBashHistory(jobTtlMs).catch(() => {});
+    })
+    .catch(() => {});
 }
 
 function startSweeper() {
@@ -321,16 +325,17 @@ function stopSweeper() {
   sweeper = null;
 }
 
-export function hydrateBashHistory() {
+export async function hydrateBashHistory() {
   try {
-    const history = getStrategicEvolutionStore().getBashHistory(500);
+    const store = await getStrategicEvolutionStore();
+    const history = store.getBashHistory(500);
     const cutoff = Date.now() - jobTtlMs;
     for (const item of history) {
       if (item.endedAt >= cutoff && !finishedSessions.has(item.id)) {
         finishedSessions.set(item.id, {
           ...item,
           status: item.status as ProcessStatus,
-          exitSignal: item.exitSignal as any,
+          exitSignal: item.exitSignal as ProcessSession["exitSignal"],
         });
       }
     }
@@ -340,4 +345,4 @@ export function hydrateBashHistory() {
 }
 
 // Hydrate on module load
-hydrateBashHistory();
+void hydrateBashHistory();

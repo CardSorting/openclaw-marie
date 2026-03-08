@@ -1,3 +1,4 @@
+import { getStrategicEvolutionStore } from "../agents/strategic-evolution-store.js";
 import { loadConfig } from "../config/config.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { emitDiagnosticEvent } from "../infra/diagnostic-events.js";
@@ -11,8 +12,6 @@ import {
   type SessionStateValue,
 } from "./diagnostic-session-state.js";
 import { createSubsystemLogger } from "./subsystem.js";
-import { requireNodeSqlite } from "../memory/sqlite.js";
-import { getStrategicEvolutionStore } from "../agents/strategic-evolution-store.js";
 
 const diag = createSubsystemLogger("diagnostic");
 
@@ -438,20 +437,22 @@ export async function logStrategicMetric(params: {
   value: number;
   message?: string;
 }) {
-  diag.info(`strategic metric: type=${params.metricType} value=${params.value} sessionKey=${params.sessionKey ?? "unknown"}${params.message ? ` msg="${params.message}"` : ""}`);
-  
+  diag.info(
+    `strategic metric: type=${params.metricType} value=${params.value} sessionKey=${params.sessionKey ?? "unknown"}${params.message ? ` msg="${params.message}"` : ""}`,
+  );
+
   // Persist to SQLite
   if (params.sessionKey) {
     try {
-      const store = getStrategicEvolutionStore();
+      const store = await getStrategicEvolutionStore();
       await store.recordMetric({
         sessionKey: params.sessionKey,
         type: params.metricType,
         value: params.value,
         metadata: { message: params.message },
       });
-    } catch (err) {
-      diag.warn(`failed to persist strategic metric: ${String(err)}`);
+    } catch (_err) {
+      diag.warn(`failed to persist strategic metric: ${String(_err)}`);
     }
   }
 

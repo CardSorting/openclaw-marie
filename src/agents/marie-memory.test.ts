@@ -1,19 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import {
-  readMemory,
-  readUserModel,
-  writeMemory,
-  writeUserModel,
-  createFrozenSnapshot,
-  getMemoryCapacity,
-  getUserModelCapacity,
-  readMemoryState,
-  MEMORY_CHAR_CAP,
-  USER_CHAR_CAP,
-} from "./marie-memory.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { stripArtifacts, flushMemory } from "./marie-memory-flush.js";
 import {
   trackTurn,
   getTurnCount,
@@ -23,7 +12,17 @@ import {
   commitNudge,
   NUDGE_INTERVAL,
 } from "./marie-memory-nudge.js";
-import { stripArtifacts, flushMemory } from "./marie-memory-flush.js";
+import {
+  readMemory,
+  readUserModel,
+  writeMemory,
+  writeUserModel,
+  createFrozenSnapshot,
+  getMemoryCapacity,
+  readMemoryState,
+  MEMORY_CHAR_CAP,
+  USER_CHAR_CAP,
+} from "./marie-memory.js";
 
 let tmpDir: string;
 
@@ -163,54 +162,54 @@ describe("marie-memory", () => {
 
 describe("marie-memory-nudge", () => {
   describe("trackTurn", () => {
-    it("returns false before reaching NUDGE_INTERVAL", () => {
+    it("returns false before reaching NUDGE_INTERVAL", async () => {
       for (let i = 1; i < NUDGE_INTERVAL; i++) {
-        expect(trackTurn("session-1")).toBe(false);
+        expect(await trackTurn("session-1")).toBe(false);
       }
     });
 
-    it("returns true at exactly NUDGE_INTERVAL", () => {
+    it("returns true at exactly NUDGE_INTERVAL", async () => {
       for (let i = 1; i < NUDGE_INTERVAL; i++) {
-        trackTurn("session-1");
+        await trackTurn("session-1");
       }
-      expect(trackTurn("session-1")).toBe(true);
+      expect(await trackTurn("session-1")).toBe(true);
     });
 
-    it("returns true again at 2x NUDGE_INTERVAL", () => {
+    it("returns true again at 2x NUDGE_INTERVAL", async () => {
       for (let i = 1; i <= NUDGE_INTERVAL; i++) {
-        trackTurn("session-1");
+        await trackTurn("session-1");
       }
       for (let i = 1; i < NUDGE_INTERVAL; i++) {
-        expect(trackTurn("session-1")).toBe(false);
+        expect(await trackTurn("session-1")).toBe(false);
       }
-      expect(trackTurn("session-1")).toBe(true);
+      expect(await trackTurn("session-1")).toBe(true);
     });
 
-    it("tracks sessions independently", () => {
+    it("tracks sessions independently", async () => {
       for (let i = 1; i < NUDGE_INTERVAL; i++) {
-        trackTurn("session-a");
+        await trackTurn("session-a");
       }
-      expect(trackTurn("session-b")).toBe(false);
-      expect(trackTurn("session-a")).toBe(true);
+      expect(await trackTurn("session-b")).toBe(false);
+      expect(await trackTurn("session-a")).toBe(true);
     });
   });
 
   describe("getTurnCount / resetTurnCount", () => {
-    it("returns 0 for unknown session", () => {
-      expect(getTurnCount("unknown")).toBe(0);
+    it("returns 0 for unknown session", async () => {
+      expect(await getTurnCount("unknown")).toBe(0);
     });
 
-    it("returns correct count after tracking", () => {
-      trackTurn("s1");
-      trackTurn("s1");
-      trackTurn("s1");
-      expect(getTurnCount("s1")).toBe(3);
+    it("returns correct count after tracking", async () => {
+      await trackTurn("s1");
+      await trackTurn("s1");
+      await trackTurn("s1");
+      expect(await getTurnCount("s1")).toBe(3);
     });
 
-    it("resets to 0", () => {
-      trackTurn("s1");
-      resetTurnCount("s1");
-      expect(getTurnCount("s1")).toBe(0);
+    it("resets to 0", async () => {
+      await trackTurn("s1");
+      await resetTurnCount("s1");
+      expect(await getTurnCount("s1")).toBe(0);
     });
   });
 
@@ -255,25 +254,25 @@ describe("marie-memory-nudge", () => {
 
 describe("marie-memory-flush", () => {
   describe("stripArtifacts", () => {
-    it("strips base64 data URIs", () => {
+    it("strips base64 data URIs", async () => {
       const content = `text data:image/png;base64,${"A".repeat(200)} more`;
-      const result = stripArtifacts(content);
+      const result = await stripArtifacts(content);
       expect(result.count).toBe(1);
       expect(result.stripped).toContain("[artifact-stripped]");
       expect(result.stripped).not.toContain("AAAA");
     });
 
-    it("strips large code blocks", () => {
+    it("strips large code blocks", async () => {
       const code = "```\n" + "x".repeat(600) + "\n```";
       const content = `before ${code} after`;
-      const result = stripArtifacts(content);
+      const result = await stripArtifacts(content);
       expect(result.count).toBe(1);
       expect(result.stripped).toContain("[artifact-stripped]");
     });
 
-    it("returns original when no artifacts found", () => {
+    it("returns original when no artifacts found", async () => {
       const content = "clean text without artifacts";
-      const result = stripArtifacts(content);
+      const result = await stripArtifacts(content);
       expect(result.count).toBe(0);
       expect(result.stripped).toBe(content);
     });

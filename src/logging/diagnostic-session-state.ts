@@ -85,7 +85,6 @@ export function saveDiagnosticSessionState(ref: SessionRef): void {
     return;
   }
 
-  const store = getStrategicEvolutionStore();
   const toPersist = {
     toolCallHistory: state.toolCallHistory,
     toolLoopWarningBuckets: state.toolLoopWarningBuckets
@@ -95,7 +94,12 @@ export function saveDiagnosticSessionState(ref: SessionRef): void {
       ? Object.fromEntries(state.commandPollCounts)
       : undefined,
   };
-  store.setSessionState(key, "diagnostic_state", toPersist);
+
+  void getStrategicEvolutionStore()
+    .then((store) => {
+      void store.setSessionState(key, "diagnostic_state", toPersist).catch(() => {});
+    })
+    .catch(() => {});
 }
 
 export function getDiagnosticSessionState(ref: SessionRef): SessionState {
@@ -105,38 +109,42 @@ export function getDiagnosticSessionState(ref: SessionRef): SessionState {
     diagnosticSessionStates.get(key) ?? (ref.sessionId && findStateBySessionId(ref.sessionId));
 
   if (!state) {
-    state = {
+    const newState: SessionState = {
       sessionId: ref.sessionId,
       sessionKey: ref.sessionKey,
       lastActivity: Date.now(),
       state: "idle",
       queueDepth: 0,
     };
+    state = newState;
     diagnosticSessionStates.set(key, state);
 
     // Attempt to hydrate from persistent store
-    try {
-      const store = getStrategicEvolutionStore();
-      const persisted = store.getSessionState<{
-        toolCallHistory?: ToolCallRecord[];
-        toolLoopWarningBuckets?: Record<string, number>;
-        commandPollCounts?: Record<string, { count: number; lastPollAt: number }>;
-      }>(key, "diagnostic_state");
+    void getStrategicEvolutionStore()
+      .then((store) => {
+        const persisted = store.getSessionState<{
+          toolCallHistory?: ToolCallRecord[];
+          toolLoopWarningBuckets?: Record<string, number>;
+          commandPollCounts?: Record<string, { count: number; lastPollAt: number }>;
+        }>(key, "diagnostic_state");
 
-      if (persisted) {
-        if (persisted.toolCallHistory) {
-          state.toolCallHistory = persisted.toolCallHistory;
+        if (persisted) {
+          if (persisted.toolCallHistory) {
+            newState.toolCallHistory = persisted.toolCallHistory;
+          }
+          if (persisted.toolLoopWarningBuckets) {
+            newState.toolLoopWarningBuckets = new Map(
+              Object.entries(persisted.toolLoopWarningBuckets),
+            );
+          }
+          if (persisted.commandPollCounts) {
+            newState.commandPollCounts = new Map(Object.entries(persisted.commandPollCounts));
+          }
         }
-        if (persisted.toolLoopWarningBuckets) {
-          state.toolLoopWarningBuckets = new Map(Object.entries(persisted.toolLoopWarningBuckets));
-        }
-        if (persisted.commandPollCounts) {
-          state.commandPollCounts = new Map(Object.entries(persisted.commandPollCounts));
-        }
-      }
-    } catch (err) {
-      // Persistence is best-effort for diagnostics
-    }
+      })
+      .catch(() => {
+        // Persistence is best-effort for diagnostics
+      });
 
     pruneDiagnosticSessionStates(Date.now(), true);
   }

@@ -17,24 +17,32 @@ import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
 
 export function createPendingToolCallState(sessionKey?: string): PendingToolCallState {
   const pending = new Map<string, string | undefined>();
-  const store = sessionKey ? getStrategicEvolutionStore() : undefined;
   const STATE_KEY = "pending_tool_calls";
-
-  if (sessionKey && store) {
-    const persisted = store.getSessionState<Record<string, string | undefined>>(
-      sessionKey,
-      STATE_KEY,
-    );
-    if (persisted) {
-      for (const [id, name] of Object.entries(persisted)) {
-        pending.set(id, name);
-      }
-    }
+  if (sessionKey) {
+    void getStrategicEvolutionStore()
+      .then((store) => {
+        const persisted = store.getSessionState<Record<string, string | undefined>>(
+          sessionKey,
+          STATE_KEY,
+        );
+        if (persisted) {
+          for (const [id, name] of Object.entries(persisted)) {
+            pending.set(id, name);
+          }
+        }
+      })
+      .catch(() => {});
   }
 
   const saveState = () => {
-    if (sessionKey && store) {
-      store.setSessionState(sessionKey, STATE_KEY, Object.fromEntries(pending));
+    if (sessionKey) {
+      void getStrategicEvolutionStore()
+        .then((store) => {
+          void store
+            .setSessionState(sessionKey, STATE_KEY, Object.fromEntries(pending))
+            .catch(() => {});
+        })
+        .catch(() => {});
     }
   };
 

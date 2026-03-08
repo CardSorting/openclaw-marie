@@ -1,7 +1,5 @@
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import {
-  readMemory,
-  readUserModel,
   writeMemory,
   writeUserModel,
   createFrozenSnapshot,
@@ -18,9 +16,6 @@ const log = createSubsystemLogger("agents/marie-memory-nudge");
 /** User turns between memory review nudges. */
 export const NUDGE_INTERVAL = 10;
 
-/** Maximum tracked sessions to prevent unbounded growth. */
-const MAX_TRACKED_SESSIONS = 256;
-
 import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
 
 const STATE_KEY_TURN_COUNT = "turn_count";
@@ -28,11 +23,11 @@ const STATE_KEY_TURN_COUNT = "turn_count";
 /**
  * Increment turn count for a session. Returns whether a nudge is due.
  */
-export function trackTurn(sessionKey: string): boolean {
-  const store = getStrategicEvolutionStore();
+export async function trackTurn(sessionKey: string): Promise<boolean> {
+  const store = await getStrategicEvolutionStore();
   const current = (store.getSessionState<number>(sessionKey, STATE_KEY_TURN_COUNT) ?? 0) + 1;
-  store.setSessionState(sessionKey, STATE_KEY_TURN_COUNT, current);
-  
+  await store.setSessionState(sessionKey, STATE_KEY_TURN_COUNT, current);
+
   log.info(`Session ${sessionKey} turn count: ${current}`);
   return current % NUDGE_INTERVAL === 0;
 }
@@ -40,22 +35,22 @@ export function trackTurn(sessionKey: string): boolean {
 /**
  * Get current turn count for a session.
  */
-export function getTurnCount(sessionKey: string): number {
-  const store = getStrategicEvolutionStore();
+export async function getTurnCount(sessionKey: string): Promise<number> {
+  const store = await getStrategicEvolutionStore();
   return store.getSessionState<number>(sessionKey, STATE_KEY_TURN_COUNT) ?? 0;
 }
 
 /**
  * Reset turn count for a session (e.g., after session close).
  */
-export function resetTurnCount(sessionKey: string): void {
-  const store = getStrategicEvolutionStore();
-  store.setSessionState(sessionKey, STATE_KEY_TURN_COUNT, 0);
+export async function resetTurnCount(sessionKey: string): Promise<void> {
+  const store = await getStrategicEvolutionStore();
+  await store.setSessionState(sessionKey, STATE_KEY_TURN_COUNT, 0);
 }
 
 /** Reset all tracking state — for tests only. */
 export function resetAllForTest(): void {
-  // Clearing the whole table is complex via the store API; 
+  // Clearing the whole table is complex via the store API;
   // in tests, the store usually points to a temp DB anyway.
 }
 
@@ -68,10 +63,7 @@ export function resetAllForTest(): void {
  * its bounded memory. The agent should respond with updated content that fits
  * within the hard caps.
  */
-export function buildNudgePrompt(
-  currentMemory: string,
-  currentUserModel: string,
-): string {
+export function buildNudgePrompt(currentMemory: string, currentUserModel: string): string {
   const memUsed = currentMemory.length;
   const userUsed = currentUserModel.length;
 

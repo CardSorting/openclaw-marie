@@ -150,10 +150,10 @@ export async function sweepCronRunSessions(params: {
     const { getJoyZoningStore } = await import("../infra/joy-zoning-store.js");
     const jzStore = getJoyZoningStore();
     const cutoff = now - retentionMs;
-    const prunedViolations = jzStore.pruneViolations(5000); // keep last 5000
-    const prunedJzSessions = jzStore.pruneOldSessions(cutoff);
-    const decayedStrikes = jzStore.decayStrikes(retentionMs * 7); // Decay strikes older than 7x retention (e.g. 1 week if retention is 1 day)
-    jzStore.optimize();
+    const prunedViolations = await jzStore.pruneViolations(5000); // keep last 5000
+    const prunedJzSessions = await jzStore.pruneOldSessions(cutoff);
+    const decayedStrikes = await jzStore.decayStrikes(retentionMs * 7); // Decay strikes older than 7x retention (e.g. 1 week if retention is 1 day)
+    await jzStore.optimize();
 
     if (prunedViolations > 0 || prunedJzSessions > 0 || decayedStrikes > 0) {
       params.log.info(

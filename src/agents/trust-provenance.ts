@@ -1,7 +1,4 @@
-import { createSubsystemLogger } from "../logging/subsystem.js";
 import { validateAndSanitizeOutput } from "../security/output-gate.js";
-
-const log = createSubsystemLogger("agents/trust-provenance");
 
 export interface ProvenanceRecord {
   memoryLayer: "bounded" | "overflow" | "fts5";
@@ -32,11 +29,13 @@ export class TrustProvenance {
    * Rejects responses that contain raw memory markers or sensitive host data.
    * Sanitizes PII before it reaches the user.
    */
-  async validateOutput(response: string): Promise<{ ok: boolean; sanitized: string; error?: string }> {
+  async validateOutput(
+    response: string,
+  ): Promise<{ ok: boolean; sanitized: string; error?: string }> {
     const res = await validateAndSanitizeOutput(response);
     if (!res.ok) {
-       return { ok: false, sanitized: "", error: res.error };
+      return { ok: false, sanitized: "", error: res.error };
     }
-    return { ok: true, sanitized: res.sanitized };
+    return { ok: true, sanitized: res.sanitized ?? response };
   }
 }

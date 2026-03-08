@@ -257,6 +257,25 @@ PY
 fi
 export OPENCLAW_GATEWAY_TOKEN
 
+if [[ -z "${OPENCLAW_AGE_SECRET_KEY:-}" ]]; then
+  # Try to reuse from .env if it exists (upsert handles reading from file)
+  if [[ -f "$ROOT_DIR/.env" ]]; then
+    OPENCLAW_AGE_SECRET_KEY="$(grep "^OPENCLAW_AGE_SECRET_KEY=" "$ROOT_DIR/.env" | cut -d'=' -f2 || echo "")"
+  fi
+  
+  if [[ -z "${OPENCLAW_AGE_SECRET_KEY:-}" ]]; then
+    if command -v age-keygen >/dev/null 2>&1; then
+      OPENCLAW_AGE_SECRET_KEY="$(age-keygen)"
+      echo "Generated new OPENCLAW_AGE_SECRET_KEY via age-keygen"
+    else
+      # Fallback to a random string if age-keygen is missing on host
+      OPENCLAW_AGE_SECRET_KEY="AGE-SECRET-KEY-$(openssl rand -hex 16)"
+      echo "Generated fallback OPENCLAW_AGE_SECRET_KEY (host missing age-keygen)"
+    fi
+  fi
+fi
+export OPENCLAW_AGE_SECRET_KEY
+
 COMPOSE_FILES=("$COMPOSE_FILE")
 COMPOSE_ARGS=()
 
@@ -409,7 +428,8 @@ upsert_env "$ENV_FILE" \
   OPENCLAW_DOCKER_SOCKET \
   DOCKER_GID \
   OPENCLAW_INSTALL_DOCKER_CLI \
-  OPENCLAW_ALLOW_INSECURE_PRIVATE_WS
+  OPENCLAW_ALLOW_INSECURE_PRIVATE_WS \
+  OPENCLAW_AGE_SECRET_KEY
 
 if [[ "$IMAGE_NAME" == "openclaw:local" ]]; then
   echo "==> Building Docker image: $IMAGE_NAME"

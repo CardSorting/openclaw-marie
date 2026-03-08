@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -89,27 +89,6 @@ function createSpawnOptions(cmd, args, envOverride) {
   };
 }
 
-function run(cmd, args) {
-  let child;
-  try {
-    child = spawn(cmd, args, createSpawnOptions(cmd, args));
-  } catch (err) {
-    console.error(`Failed to launch ${cmd}:`, err);
-    process.exit(1);
-    return;
-  }
-
-  child.on("error", (err) => {
-    console.error(`Failed to launch ${cmd}:`, err);
-    process.exit(1);
-  });
-  child.on("exit", (code) => {
-    if (code !== 0) {
-      process.exit(code ?? 1);
-    }
-  });
-}
-
 function runSync(cmd, args, envOverride) {
   let result;
   try {
@@ -179,7 +158,7 @@ export function main(argv = process.argv.slice(2)) {
   }
 
   if (action === "install") {
-    run(runner.cmd, ["install", ...rest]);
+    runSync(runner.cmd, ["install", ...rest]);
     return;
   }
 
@@ -190,7 +169,7 @@ export function main(argv = process.argv.slice(2)) {
     runSync(runner.cmd, installArgs, installEnv);
   }
 
-  run(runner.cmd, ["run", script, ...rest]);
+  runSync(runner.cmd, ["run", script, ...rest]);
 }
 
 const isDirectExecution = (() => {

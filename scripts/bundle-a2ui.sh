@@ -15,12 +15,12 @@ A2UI_APP_DIR="$ROOT_DIR/apps/shared/OpenClawKit/Tools/CanvasA2UI"
 
 # Docker builds exclude vendor/apps via .dockerignore.
 # In that environment we can keep a prebuilt bundle only if it exists.
-if [[ ! -d "$A2UI_RENDERER_DIR" || ! -d "$A2UI_APP_DIR" ]]; then
+if [[ ! -d "$A2UI_RENDERER_DIR" || ! -f "$A2UI_RENDERER_DIR/tsconfig.json" || ! -d "$A2UI_APP_DIR" ]]; then
   if [[ -f "$OUTPUT_FILE" ]]; then
-    echo "A2UI sources missing; keeping prebuilt bundle."
+    echo "A2UI sources missing or incomplete; keeping prebuilt bundle."
     exit 0
   fi
-  echo "A2UI sources missing and no prebuilt bundle found at: $OUTPUT_FILE" >&2
+  echo "A2UI sources missing/incomplete and no prebuilt bundle found at: $OUTPUT_FILE" >&2
   exit 1
 fi
 

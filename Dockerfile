@@ -1,5 +1,5 @@
 # --- Build Stage ---
-FROM node:22-bookworm@sha256:cd7bcd2e7a1e6f72052feb023c7f6b722205d3fcab7bbcbd2d1bfdab10b1e935 AS builder
+FROM node:22-bookworm AS builder
 
 # Install Bun (required for build scripts)
 RUN curl -fsSL https://bun.sh/install | bash
@@ -26,7 +26,7 @@ ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:build
 
 # --- Production Stage ---
-FROM node:22-bookworm-slim@sha256:2fdb94627d3c52e071912a7813a02795e1e550424560410ef50d892d476615b8
+FROM node:22-bookworm
 
 LABEL org.opencontainers.image.source="https://github.com/openclaw/openclaw" \
   org.opencontainers.image.url="https://openclaw.ai" \
@@ -41,20 +41,21 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   curl \
+  age \
+  git \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy built assets from builder
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/ui/dist ./ui/dist
+COPY --from=builder /app/dist/control-ui ./ui/dist
 COPY --from=builder /app/openclaw.mjs ./
 COPY --from=builder /app/scripts/healthcheck.js ./scripts/healthcheck.js
 COPY --from=builder /app/extensions ./extensions
 COPY --from=builder /app/skills ./skills
-COPY --from=builder /app/assets ./assets
 
 # Install only production dependencies
-RUN corepack enable && pnpm install --prod --frozen-lockfile
+RUN corepack enable && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 # Expose the CLI binary
 RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
@@ -89,4 +90,5 @@ USER node
 HEALTHCHECK --interval=2m --timeout=10s --start-period=30s --retries=3 \
   CMD ["node", "scripts/healthcheck.js"]
 
-CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
+ENTRYPOINT ["node", "openclaw.mjs"]
+CMD ["gateway", "--allow-unconfigured"]

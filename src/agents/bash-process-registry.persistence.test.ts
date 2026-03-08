@@ -1,26 +1,35 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { 
-  addSession, 
-  markBackgrounded, 
-  markExited, 
-  listFinishedSessions, 
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import {
+  addSession,
+  markExited,
+  listFinishedSessions,
+  getFinishedSession,
+  hydrateBashHistory,
   resetProcessRegistryForTests,
-  getFinishedSession
 } from "./bash-process-registry.js";
-import { 
-  getStrategicEvolutionStore, 
-  resetStrategicEvolutionStoreForTest 
-} from "./strategic-evolution-store.js";
 import { createProcessSessionFixture } from "./bash-process-registry.test-helpers.js";
+import {
+  getStrategicEvolutionStore,
+  resetStrategicEvolutionStoreForTest,
+  type PersistentBashSession,
+} from "./strategic-evolution-store.js";
 
 describe("bash process registry persistence", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetProcessRegistryForTests();
     resetStrategicEvolutionStoreForTest();
     // Ensure tables are empty
-    const store = getStrategicEvolutionStore();
-    (store as any).db.prepare("DELETE FROM sev_bash_history").run();
-    (store as any).db.prepare("DELETE FROM sev_session_state").run();
+    const store = await getStrategicEvolutionStore();
+    // Use unknown cast to access private pool for cleanup in test
+    await (
+      store as unknown as {
+        pool: { withWriteLock: (cb: (db: unknown) => Promise<void>) => Promise<void> };
+      }
+    ).pool.withWriteLock(async (db: unknown) => {
+      const typedDb = db as { prepare: (s: string) => { run: () => void } };
+      typedDb.prepare("DELETE FROM sev_bash_history").run();
+      typedDb.prepare("DELETE FROM sev_session_state").run();
+    });
   });
 
   afterEach(() => {
@@ -29,7 +38,7 @@ describe("bash process registry persistence", () => {
   });
 
   it("persists finished backgrounded sessions to StrategicEvolutionStore", async () => {
-    const store = getStrategicEvolutionStore();
+    const store = await getStrategicEvolutionStore();
     const session = createProcessSessionFixture({
       id: "persisted-sess",
       command: "echo persisted",
@@ -38,6 +47,9 @@ describe("bash process registry persistence", () => {
 
     addSession(session);
     markExited(session, 0, null, "completed");
+
+    // Wait for async persistence
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Check in-memory
     expect(listFinishedSessions()).toHaveLength(1);
@@ -52,11 +64,11 @@ describe("bash process registry persistence", () => {
   });
 
   it("hydrates finished sessions from StrategicEvolutionStore", async () => {
-    const store = getStrategicEvolutionStore();
-    
+    const store = await getStrategicEvolutionStore();
+
     // Manually insert into DB to simulate existing history
     const now = Date.now();
-    store.saveBashHistory({
+    const mockHistory: PersistentBashSession = {
       id: "hydrated-sess",
       command: "echo hydrated",
       status: "completed",
@@ -66,16 +78,16 @@ describe("bash process registry persistence", () => {
       tail: "output",
       truncated: false,
       totalOutputChars: 6,
-      sessionKey: "test-session"
-    });
+      sessionKey: "test-session",
+    };
+    await store.saveBashHistory(mockHistory);
 
-    // Verify initially empty (except for what might have happened in other tests)
+    // Verify initially empty
     resetProcessRegistryForTests();
     expect(listFinishedSessions()).toHaveLength(0);
 
     // Call hydration
-    const { hydrateBashHistory } = await import("./bash-process-registry.js");
-    hydrateBashHistory();
+    await hydrateBashHistory();
 
     // Check in-memory
     const sessions = listFinishedSessions();
