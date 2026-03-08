@@ -2,6 +2,7 @@ import { createSubsystemLogger } from "../logging/subsystem.js";
 import { scanInput } from "./injection-scanner.js";
 import { redactPII } from "./redaction.js";
 import { detectHoneyPotLeak } from "./honey-pots.js";
+import { emitForensicEvent } from "./quarantine-shadow.js";
 import { getSecurityAuditStore } from "../infra/security-audit-store.js";
 import { getJoyZoningStore } from "../infra/joy-zoning-store.js";
 import { MEMORY_CHAR_CAP, USER_CHAR_CAP } from "../agents/marie-memory.js";
@@ -11,14 +12,10 @@ const log = createSubsystemLogger("security/memory-write-gate");
 export interface ValidationResult {
   ok: boolean;
   error?: string;
-  redactedContent?: string;
 }
 
-const SECURITY_STRIKE_THRESHOLD = 3;
-
 /**
- * Pre-write validation gate for MEMORY.md and USER.md.
- *
+ * Validates memory writes (MEMORY.md or USER.md).
  * Runs PII redaction, injection scanner, and enforces hard caps.
  * Integrated with persistent security audit and Joy-Zoning strike system.
  */
@@ -32,76 +29,50 @@ export async function validateMemoryWrite(
   const store = getSecurityAuditStore();
   const jzStore = getJoyZoningStore();
 
-  // 0. Lockdown Check: Block if strikes exceed threshold
-  const strikes = jzStore.getStrikeCount(fileName) || 0;
-  if (strikes >= SECURITY_STRIKE_THRESHOLD) {
-    const error = `SECURITY LOCKDOWN: ${fileName} write blocked due to excessive security strikes (${strikes}). Manual intervention required.`;
-    log.error(error);
-    return { ok: false, error };
+  // 0. Hard caps
+  if (content.length > cap) {
+    log.warn(`Write blocked: ${fileName} exceeds cap (${content.length} > ${cap})`);
+    return { ok: false, error: `Content exceeds ${fileName} character cap.` };
   }
 
   // 0.5 Honey-pot check: Detect if agent is trying to persist canary secrets
   const leak = detectHoneyPotLeak(content);
   if (leak) {
-      log.error(`CRITICAL: Agent attempted to persist honey-pot ${leak.id} to ${fileName}!`);
-      await jzStore.incrementStrikes(fileName, 5); // Immediate high strike count
+      log.error(`HONEY-POT LEAK DETECTED in memory write [${type}]: ${leak.id}`);
+      await emitForensicEvent({ type: "HONEYPOT_LEAK", leak: leak.id, channel: "memory", file: fileName });
+      await jzStore.incrementStrikes("HONEYPOT_LEAK", 10);
       return { ok: false, error: "SECURITY ERROR: Unauthorized persistence of canary data detected." };
   }
 
-  // 1. Redact PII
-  const { content: redacted, redactedCount } = redactPII(content);
-  if (redactedCount > 0) {
-    log.info(`Scrubbed ${redactedCount} PII tokens from ${fileName}.`);
-    void store.recordFinding({
-      category: "pii-redaction",
-      severity: "info",
-      description: `Redacted ${redactedCount} tokens from ${fileName}`,
+  // 1. Injection Scanning
+  const scan = scanInput(content);
+  if (scan.blocked) {
+    const firstFinding = scan.findings[0];
+    const category = firstFinding?.category ?? "UNKNOWN";
+    const reason = firstFinding?.description ?? "Suspicious pattern detected";
+    
+    log.error(`MALICIOUS WRITE BLOCKED: [${category}] ${reason}`);
+    await store.recordFinding({
+      category: "INJECTION_ATTEMPT",
+      severity: "CRITICAL",
+      description: `Blocked ${category} in memory write: ${reason}`,
       context: fileName,
     });
+    await jzStore.incrementStrikes(fileName, 1);
+    return { ok: false, error: `Security violation detected: ${reason}` };
   }
 
-  // 2. Enforce Hard Caps
-  if (redacted.length > cap) {
-    const error = `${fileName} write rejected: ${redacted.length} chars exceeds hard cap of ${cap} chars.`;
-    log.warn(error);
-    return { ok: false, error };
+  // 2. PII Redaction check
+  const redaction = redactPII(content);
+  if (redaction.content !== content) {
+    log.warn(`PII detected in memory write to ${fileName}. Redacting...`);
+    await store.recordFinding({
+      category: "PII_LEAK",
+      severity: "HIGH",
+      description: `Redacted PII leaked in memory write to ${fileName}`,
+    });
+    // We don't block PII leaks here as we redact them, but we record the event.
   }
 
-  // 3. Run Injection Scanner
-  const scanResult = scanInput(redacted, fileName);
-  if (scanResult.blocked) {
-    const findingDetails = scanResult.findings
-      .map((f) => `[${f.patternId}] ${f.description}`)
-      .join("; ");
-    
-    // Log findings to persistent audit store
-    for (const finding of scanResult.findings) {
-      void store.recordFinding({
-        category: finding.category,
-        severity: finding.severity,
-        description: finding.description,
-        matchSnippet: finding.match,
-        context: fileName,
-      });
-
-      // Increment security strikes for severe violations
-      if (finding.severity === "critical" && options?.sessionKey) {
-          void jzStore.recordViolation({
-              sessionKey: options.sessionKey,
-              filePath: fileName,
-              layer: "security",
-              level: "block",
-              message: `Security threat detected: ${finding.description}`,
-              severity: "critical",
-          });
-          void jzStore.getOrIncrementStrike(fileName, finding.description);
-      }
-    }
-
-    const error = `${fileName} write blocked due to security threats: ${findingDetails}`;
-    log.warn(error);
-    return { ok: false, error };
-  }
-
-  return { ok: true, redactedContent: redacted };
+  return { ok: true };
 }

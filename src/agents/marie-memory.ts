@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
+import { getQuarantinePath } from "../security/quarantine-shadow.js";
 import { createHash } from "node:crypto";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 
@@ -234,13 +235,15 @@ export async function createFrozenSnapshot(
   // Filename: ISO timestamp (sanitized for filesystem) + hash prefix
   const safeTs = timestamp.replace(/[:.]/g, "-");
   const snapshotPath = path.join(dir, `${safeTs}_${hash}.md`);
-  await fs.writeFile(snapshotPath, combined, "utf8");
+  const fullPath = await getQuarantinePath(snapshotPath); // Use snapshotPath as base for quarantine
+  await fs.mkdir(path.dirname(fullPath), { recursive: true });
+  await fs.writeFile(fullPath, combined, "utf-8"); // Use combined content
 
   // Prune old snapshots beyond MAX_SNAPSHOTS
   await pruneOldSnapshots(dir);
 
-  log.info(`Frozen snapshot created: ${snapshotPath}`);
-  return { timestamp, hash, path: snapshotPath };
+  log.info(`Frozen snapshot created: ${fullPath}`); // Log the actual path written to
+  return { timestamp, hash, path: fullPath }; // Return the actual path written to
 }
 
 /**

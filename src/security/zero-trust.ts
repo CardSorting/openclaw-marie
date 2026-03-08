@@ -32,3 +32,22 @@ export function authorizeToolExecution(command: string): { authorized: boolean; 
     
     return { authorized: true };
 }
+
+/**
+ * Network Tarpitting: Introduces artificial latency for networkbound tools
+ * if the session has any security strikes. This slows down automated exfiltration.
+ */
+export async function tarpitNetworkTool(command: string): Promise<void> {
+    const jzStore = getJoyZoningStore();
+    const health = jzStore.getHealthSummary();
+    
+    // If there's any recorded suspicion, tarpit network tools
+    if (health.totalWarnings > 0 || health.totalBlocks > 0) {
+        const networkTools = /\b(curl|wget|git|nc|netcat|nmap|ping|ssh|scp|ftp)\b/i;
+        if (networkTools.test(command)) {
+            const delay = Math.min(10000, 2000 + (health.totalWarnings * 1000)); // Dynamic delay up to 10s
+            log.warn(`Tarpitting network tool '${command}' for ${delay}ms due to low session trust.`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}

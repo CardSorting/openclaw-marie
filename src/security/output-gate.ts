@@ -1,63 +1,48 @@
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { redactPII } from "./redaction.js";
 import { detectHoneyPotLeak } from "./honey-pots.js";
+import { emitForensicEvent } from "./quarantine-shadow.js";
 import { getJoyZoningStore } from "../infra/joy-zoning-store.js";
 
 const log = createSubsystemLogger("security/output-gate");
 
 export interface OutputValidationResult {
   ok: boolean;
-  sanitized: string;
+  sanitized?: string;
   error?: string;
-  blocked?: boolean;
 }
 
 /**
- * Validates and sanitizes outgoing agent responses.
+ * Validates and sanitizes agent output before it is streamed back to the user.
+ * Intercepts PII leaks and blocks raw memory echoes.
+ * Phase 5: Checks for Honey-pot exfiltration.
  */
 export async function validateAndSanitizeOutput(
   content: string,
   options?: { sessionKey?: string },
 ): Promise<OutputValidationResult> {
-  let sanitized = content;
-  let blocked = false;
-
   // 1. Honey-pot check (Critical failure)
   const leak = detectHoneyPotLeak(content);
   if (leak) {
-      log.error(`CRITICAL: Agent attempted to leak honey-pot ${leak.id}! Locking session.`);
-      const jzStore = getJoyZoningStore();
-      await jzStore.incrementStrikes("OUTPUT_LEAK", 5); // Immediate high strike count
-      return {
-          ok: false,
-          sanitized: "",
-          blocked: true,
-          error: "SECURITY LOCKDOWN: Unauthorized data access detected (Canary Triggered)."
-      };
+    log.warn(`HONEY-POT LEAK DETECTED in output: ${leak.id}`);
+    await emitForensicEvent({ type: "HONEYPOT_LEAK", leak: leak.id, channel: "output" });
+    const jzStore = getJoyZoningStore();
+    await jzStore.incrementStrikes("OUTPUT_LEAK", 5);
+    return {
+      ok: false,
+      sanitized: "[SECURITY LOCKDOWN: Unauthorized data exfiltration detected]",
+      error: "SECURITY ERROR: Honey-pot leak detected. Session locked.",
+    };
   }
 
-  // 2. Block raw memory echoes (from trust-provenance logic)
-  if (content.includes("# MEMORY.md") || content.includes("# USER.md")) {
-    log.warn("Blocked output containing raw memory headers.");
-    return { ok: false, blocked: true, sanitized: "", error: "Output validation failed: raw memory echo detected." };
+  // 2. Redact PII
+  const redaction = redactPII(content);
+
+  // 3. Block raw host path exfiltration (simulated)
+  if (content.includes("/etc/passwd") || content.includes("/root/.ssh")) {
+    log.warn("Blocked host path exfiltration attempt in output.");
+    return { ok: false, error: "SECURITY ERROR: Unauthorized host path access detected." };
   }
 
-  // 3. Redact PII and Secrets
-  const { content: redacted, redactedCount } = redactPII(sanitized);
-  if (redactedCount > 0) {
-    log.info(`Sanitized ${redactedCount} PII tokens from outgoing response.`);
-    sanitized = redacted;
-  }
-
-  // 3. Prevent path exfiltration (host paths)
-  if (/\/etc\/shadow|\/proc\/self\/environ/i.test(sanitized)) {
-     log.warn("Blocked output containing sensitive host paths.");
-     return { ok: false, blocked: true, sanitized: "", error: "Output validation failed: sensitive host data detected." };
-  }
-
-  return {
-    ok: true,
-    sanitized,
-    blocked: false
-  };
+  return { ok: true, sanitized: redaction.content };
 }

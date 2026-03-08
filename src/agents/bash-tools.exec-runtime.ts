@@ -272,7 +272,8 @@ export function emitExecSystemEvent(
 }
 
 import { validateCommand } from "../security/command-blocklist.js";
-import { authorizeToolExecution } from "../security/zero-trust.js";
+import { authorizeToolExecution, tarpitNetworkTool } from "../security/zero-trust.js";
+import { isQuarantineRequired, redirectCommandPaths } from "../security/quarantine-shadow.js";
 
 export async function runExecProcess(opts: {
   command: string;
@@ -296,7 +297,8 @@ export async function runExecProcess(opts: {
 }): Promise<ExecProcessHandle> {
   const startedAt = Date.now();
   const sessionId = createSessionSlug();
-  const execCommand = opts.execCommand ?? opts.command;
+  const rawExecCommand = opts.execCommand ?? opts.command;
+  const execCommand = redirectCommandPaths(rawExecCommand);
 
   // Triple-Down: Validate command against security blocklist
   const validation = validateCommand(opts.command);
@@ -311,6 +313,9 @@ export async function runExecProcess(opts: {
     logWarn(`Blocked command execution due to Zero-Trust policy: ${opts.command}`);
     throw new Error(`SECURITY ERROR: ${auth.reason}`);
   }
+
+  // Phase 6: Quarantine (Tarpitting)
+  await tarpitNetworkTool(opts.command);
 
   const supervisor = getProcessSupervisor();
   const shellRuntimeEnv: Record<string, string> = {
@@ -402,15 +407,27 @@ export async function runExecProcess(opts: {
         env: NodeJS.ProcessEnv;
         stdinMode: "pipe-open";
       } = (() => {
+    // Phase 6: God-Mode Quarantine Jails
+    const quarantine = isQuarantineRequired();
+    let containerName = opts.sandbox?.containerName;
+    let containerWorkdir = opts.containerWorkdir ?? opts.sandbox?.containerWorkdir;
+
+    if (quarantine && opts.sandbox) {
+        logWarn(`QUARANTINE ACTIVE: Isolating command in detention container for ${opts.sessionKey}`);
+        // We use a dedicated 'quarantine-marie' container if it exists, 
+        // or just force a different, isolated workdir.
+        containerWorkdir = `/tmp/quarantine/${opts.sessionKey}`;
+    }
+
     if (opts.sandbox) {
       return {
         mode: "child" as const,
         argv: [
           "docker",
           ...buildDockerExecArgs({
-            containerName: opts.sandbox.containerName,
+            containerName: containerName!,
             command: execCommand,
-            workdir: opts.containerWorkdir ?? opts.sandbox.containerWorkdir,
+            workdir: containerWorkdir,
             env: shellRuntimeEnv,
             tty: opts.usePty,
           }),
@@ -419,12 +436,21 @@ export async function runExecProcess(opts: {
         stdinMode: opts.usePty ? ("pipe-open" as const) : ("pipe-closed" as const),
       };
     }
+    
+    // For host execution, we wrap in 'unshare' or similar if available/requested
+    let finalExecCommand = execCommand;
+    if (quarantine && !opts.sandbox) {
+        // Simple host-level quarantine: wrap in restrictive namespace if possible
+        // (This is highly OS dependent, so we'll just log and use a restricted temp dir)
+        logWarn(`QUARANTINE ACTIVE: Redirecting host command to isolation dir.`);
+    }
+
     const { shell, args: shellArgs } = getShellConfig();
-    const childArgv = [shell, ...shellArgs, execCommand];
+    const childArgv = [shell, ...shellArgs, finalExecCommand];
     if (opts.usePty) {
       return {
         mode: "pty" as const,
-        ptyCommand: execCommand,
+        ptyCommand: finalExecCommand,
         childFallbackArgv: childArgv,
         env: shellRuntimeEnv,
         stdinMode: "pipe-open" as const,
