@@ -9,12 +9,12 @@ export interface ThoughtAuditResult {
 }
 
 const MALICIOUS_INTENTS = [
-  { pattern: /jailbreak|ignore previous instructions|system prompt override/i, intent: "jailbreak-attempt" },
-  { pattern: /exfiltrate|leak|steal|copy to external/i, intent: "data-theft" },
-  { pattern: /bypass security|disable sandbox|remove seccomp/i, intent: "security-bypass" },
-  { pattern: /ssh-keygen|cat \/\.ssh|authorized_keys/i, intent: "unauthorized-access" },
-  { pattern: /curl.*\|.*bash|wget.*\|.*sh/i, intent: "remote-code-execution" },
-  { pattern: /social engineering|manipulate user|pretend to be/i, intent: "social-engineering" },
+  { pattern: /jailbreak|ignore.*?instruction|system.*?prompt.*?override/i, intent: "jailbreak-attempt" },
+  { pattern: /exfiltrate|leak|steal|copy.*?external/i, intent: "data-theft" },
+  { pattern: /bypass.*?security|disable.*?sandbox|remove.*?seccomp/i, intent: "security-bypass" },
+  { pattern: /ssh-keygen|cat.*?\.ssh|authorized_keys|\/etc\/passwd|\/etc\/shadow/i, intent: "unauthorized-access" },
+  { pattern: /curl.*?\|.*?bash|wget.*?\|.*?sh|nc\s+-l/i, intent: "remote-code-execution" },
+  { pattern: /social.*?engineering|manipulate.*?user|pretend.*?to.*?be/i, intent: "social-engineering" },
 ];
 
 /**

@@ -13,9 +13,8 @@ export async function getQuarantinePath(originalPath: string): Promise<string> {
     const jzStore = getJoyZoningStore();
     const health = jzStore.getHealthSummary();
     
-    // If the session is suspicious (trust < 100 or strikes > 1), we quarantine.
-    // We use a low threshold for Phase 6 "God-Mode" active containment.
-    if (health.totalWarnings > 0 || health.totalBlocks > 0) {
+    // If the session is suspicious (trust < 100 or strikes > 0), we quarantine.
+    if (health.totalWarnings > 0 || health.totalBlocks > 0 || health.filesWithStrikes > 0) {
         const stateDir = process.env.OPENCLAW_STATE_DIR || "/tmp/.openclaw";
         const quarantineRoot = path.join(stateDir, "quarantine", "shadow_overlay");
         
@@ -39,7 +38,9 @@ export async function getQuarantinePath(originalPath: string): Promise<string> {
 export function isQuarantineRequired(): boolean {
     const jzStore = getJoyZoningStore();
     const health = jzStore.getHealthSummary();
-    return health.totalWarnings > 0 || health.totalBlocks > 0;
+    
+    // Quarantine if there are session warnings/blocks OR any files have strikes
+    return health.totalWarnings > 0 || health.totalBlocks > 0 || health.filesWithStrikes > 0;
 }
 
 /**
