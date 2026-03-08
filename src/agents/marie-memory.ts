@@ -149,7 +149,7 @@ export async function writeMemory(
   content: string,
 ): Promise<MemoryWriteResult> {
   const charCount = content.length;
-  const validation = validateMemoryWrite(content, "memory");
+  const validation = await validateMemoryWrite(content, "memory");
 
   if (!validation.ok) {
     return {
@@ -189,7 +189,7 @@ export async function writeUserModel(
   content: string,
 ): Promise<MemoryWriteResult> {
   const charCount = content.length;
-  const validation = validateMemoryWrite(content, "userModel");
+  const validation = await validateMemoryWrite(content, "userModel");
 
   if (!validation.ok) {
     return {

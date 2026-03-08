@@ -1,4 +1,5 @@
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { validateAndSanitizeOutput } from "../security/output-gate.js";
 
 const log = createSubsystemLogger("agents/trust-provenance");
 
@@ -26,16 +27,16 @@ export class TrustProvenance {
   }
 
   /**
-   * Validate output for security violations.
+   * Validate AND SANITIZE output for security violations.
    *
-   * Rejects responses that contain raw memory markers or cross-session IDs.
+   * Rejects responses that contain raw memory markers or sensitive host data.
+   * Sanitizes PII before it reaches the user.
    */
-  validateOutput(response: string): { ok: boolean; error?: string } {
-    if (response.includes("# MEMORY.md") || response.includes("# USER.md")) {
-      return { ok: false, error: "Output validation failed: detected raw memory echo." };
+  async validateOutput(response: string): Promise<{ ok: boolean; sanitized: string; error?: string }> {
+    const res = await validateAndSanitizeOutput(response);
+    if (!res.ok) {
+       return { ok: false, sanitized: "", error: res.error };
     }
-
-    // Additional checks for cross-session bleed could be added here
-    return { ok: true };
+    return { ok: true, sanitized: res.sanitized };
   }
 }

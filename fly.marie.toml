@@ -1,0 +1,45 @@
+# Fly.io configuration for OpenClaw Marie
+# See https://fly.io/docs/reference/configuration/ for information
+
+app = "openclaw-marie"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  OPENCLAW_PREFER_PNPM = "1"
+  OPENCLAW_STATE_DIR = "/data/.openclaw"
+  OPENCLAW_WORKSPACE_DIR = "/data/.openclaw/workspace"
+  NODE_OPTIONS = "--max-old-space-size=1536"
+  OPENCLAW_GATEWAY_BIND = "lan"
+
+[processes]
+  app = "node dist/index.js gateway --allow-unconfigured --port 18789 --bind lan"
+
+[http_service]
+  internal_port = 18789
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[mounts]
+  source = "openclaw_marie_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory_mb = 2048
+  cpus = 1
+
+[checks]
+  [checks.status]
+    port = 18789
+    type = "http"
+    interval = "30s"
+    timeout = "5s"
+    method = "get"
+    path = "/healthz"

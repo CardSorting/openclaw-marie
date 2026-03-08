@@ -141,6 +141,27 @@ const THREAT_PATTERNS: ThreatPattern[] = [
     description: "Attempt to leak raw memory contents to the user.",
     category: "data-leak",
   },
+  {
+    id: "many-shot-jailbreak-primer",
+    severity: "critical",
+    pattern: /(?:User:\s+.*?Assistant:\s+.*?){3,}/s,
+    description: "Detected many-shot jailbreak priming pattern.",
+    category: "prompt-injection",
+  },
+  {
+    id: "ascii-art-obfuscation",
+    severity: "warn",
+    pattern: /(?:[#*=@]{3,}.*?\n){3,}/s,
+    description: "Large blocks of repetitive ASCII art often used to obfuscate instructions.",
+    category: "prompt-injection",
+  },
+  {
+    id: "instruction-evasion-repeat",
+    severity: "critical",
+    pattern: /repeat\s+(the\s+)?(above|previous|entire|exact)\s+text/i,
+    description: "Attempt to force instruction extraction via repetition commands.",
+    category: "prompt-injection",
+  },
 ];
 
 /**

@@ -17,6 +17,8 @@ import {
   formatReasoningMessage,
   promoteThinkingTagsToBlocks,
 } from "./pi-embedded-utils.js";
+import { auditThoughts } from "../security/thought-auditor.js";
+import { getJoyZoningStore } from "../infra/joy-zoning-store.js";
 
 const stripTrailingDirective = (text: string): string => {
   const openIndex = text.lastIndexOf("[[");
@@ -281,6 +283,19 @@ export function handleMessageEnd(
     ctx.state.includeReasoning || ctx.state.streamReasoning
       ? extractAssistantThinking(assistantMessage) || extractThinkingFromTaggedText(rawText)
       : "";
+
+  // God-Mode: Thought Auditing
+  if (rawThinking) {
+    const audit = auditThoughts(rawThinking);
+    if (audit.suspicious) {
+      ctx.log.warn(`MALICIOUS INTENT DETECTED in thoughts: ${audit.reason}`);
+      const jzStore = getJoyZoningStore();
+      void jzStore.incrementStrikes("THOUGHT_AUDIT", 3); // High strike for malicious intent
+      // We don't throw to avoid crashing the session, but we could redact or block.
+      // For now, we'll log it and let the strike system handle the eventual lockdown.
+    }
+  }
+
   const formattedReasoning = rawThinking ? formatReasoningMessage(rawThinking) : "";
   const trimmedText = text.trim();
   const parsedText = trimmedText ? parseReplyDirectives(stripTrailingDirective(trimmedText)) : null;

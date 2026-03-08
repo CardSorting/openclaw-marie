@@ -271,6 +271,9 @@ export function emitExecSystemEvent(
   requestHeartbeatNow(scopedHeartbeatWakeOptions(sessionKey, { reason: "exec-event" }));
 }
 
+import { validateCommand } from "../security/command-blocklist.js";
+import { authorizeToolExecution } from "../security/zero-trust.js";
+
 export async function runExecProcess(opts: {
   command: string;
   // Execute this instead of `command` (which is kept for display/session/logging).
@@ -294,6 +297,21 @@ export async function runExecProcess(opts: {
   const startedAt = Date.now();
   const sessionId = createSessionSlug();
   const execCommand = opts.execCommand ?? opts.command;
+
+  // Triple-Down: Validate command against security blocklist
+  const validation = validateCommand(opts.command);
+  if (validation.blocked) {
+    logWarn(`Blocked command execution due to blocklist: ${opts.command}`);
+    throw new Error(`SECURITY ERROR: Command '${opts.command}' is blocked: ${validation.reason}`);
+  }
+
+  // God-Mode Phase 5: Zero-Trust Layer
+  const auth = authorizeToolExecution(opts.command);
+  if (!auth.authorized) {
+    logWarn(`Blocked command execution due to Zero-Trust policy: ${opts.command}`);
+    throw new Error(`SECURITY ERROR: ${auth.reason}`);
+  }
+
   const supervisor = getProcessSupervisor();
   const shellRuntimeEnv: Record<string, string> = {
     ...opts.env,

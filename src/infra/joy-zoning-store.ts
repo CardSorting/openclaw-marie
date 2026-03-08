@@ -285,6 +285,10 @@ export class JoyZoningStore {
   // ── Strikes ─────────────────────────────────────────────────────────────
 
   async getOrIncrementStrike(filePath: string, violationMessage?: string): Promise<number> {
+    return await this.incrementStrikes(filePath, 1, violationMessage);
+  }
+
+  async incrementStrikes(filePath: string, amount: number, violationMessage?: string): Promise<number> {
     const now = Date.now();
     return await this.pool.withWriteLock((db) => {
       const existing = this.prepare(db, `SELECT strikeCount FROM jz_strikes WHERE filePath = ?`).get(
@@ -292,7 +296,7 @@ export class JoyZoningStore {
       ) as { strikeCount: number } | undefined;
 
       if (existing) {
-        const newCount = existing.strikeCount + 1;
+        const newCount = existing.strikeCount + amount;
         this.prepare(
           db,
           `UPDATE jz_strikes SET strikeCount = ?, lastViolation = ?, updatedAt = ? WHERE filePath = ?`,
@@ -302,9 +306,9 @@ export class JoyZoningStore {
 
       this.prepare(
         db,
-        `INSERT INTO jz_strikes (filePath, strikeCount, lastViolation, updatedAt) VALUES (?, 1, ?, ?)`,
-      ).run(filePath, violationMessage ?? null, now);
-      return 1;
+        `INSERT INTO jz_strikes (filePath, strikeCount, lastViolation, updatedAt) VALUES (?, ?, ?, ?)`,
+      ).run(filePath, amount, violationMessage ?? null, now);
+      return amount;
     });
   }
 

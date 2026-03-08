@@ -1,0 +1,64 @@
+networks:
+  marie-internal:
+    driver: bridge
+    internal: true
+  marie-public:
+    driver: bridge
+
+services:
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    container_name: openclaw-gateway
+    restart: always
+    environment:
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT:-18789}
+      - OPENCLAW_GATEWAY_BIND=${OPENCLAW_GATEWAY_BIND:-lan}
+      - NODE_ENV=production
+    ports:
+      - "${OPENCLAW_GATEWAY_PORT:-18789}:${OPENCLAW_GATEWAY_PORT:-18789}"
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw:rw
+      - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace:rw
+      - ./docker/seccomp.json:/home/node/seccomp.json:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/node/.npm
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./docker/seccomp.json
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    networks:
+      - marie-internal
+      - marie-public
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+    healthcheck:
+      test: [ "CMD", "node", "scripts/healthcheck.js" ]
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  openclaw-cli:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    container_name: openclaw-cli
+    environment:
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT:-18789}
+      - OPENCLAW_GATEWAY_BIND=${OPENCLAW_GATEWAY_BIND:-lan}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw:rw
+      - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace:rw
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - marie-internal
+    profiles:
+      - tools

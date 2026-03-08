@@ -258,6 +258,44 @@ async function assertSecurePath(params: {
   return effectivePath;
 }
 
+async function decryptIfNecessary(filePath: string, buffer: Buffer): Promise<Buffer> {
+  if (!filePath.endsWith(".age")) {
+    return buffer;
+  }
+
+  const ageKey = process.env.OPENCLAW_AGE_SECRET_KEY;
+  if (!ageKey) {
+    throw new Error(`Encrypted file detected (.age) but OPENCLAW_AGE_SECRET_KEY is not set.`);
+  }
+
+  return await new Promise((resolve, reject) => {
+    const child = spawn("age", ["--decrypt", "--identity", "-", filePath], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = Buffer.alloc(0);
+    let stderr = "";
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout = Buffer.concat([stdout, chunk]);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        reject(new Error(`Decryption failed (code ${code}): ${stderr}`));
+      }
+    });
+
+    child.stdin.write(ageKey);
+    child.stdin.end();
+  });
+}
+
 async function readFileProviderPayload(params: {
   providerName: string;
   providerConfig: FileSecretProviderConfig;
@@ -290,10 +328,14 @@ async function readFileProviderPayload(params: {
       }, timeoutMs);
     });
     try {
-      const payload = await Promise.race([
+      const rawBuffer = await Promise.race([
         fs.readFile(secureFilePath, { signal: abortController.signal }),
         timeoutPromise,
       ]);
+
+      // Triple-Down: Decrypt if necessary
+      const payload = await decryptIfNecessary(secureFilePath, Buffer.from(rawBuffer as Uint8Array));
+
       if (payload.byteLength > maxBytes) {
         throw new Error(`File provider "${params.providerName}" exceeded maxBytes (${maxBytes}).`);
       }

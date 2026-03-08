@@ -162,6 +162,22 @@ fi
 if [[ -z "$DOCKER_SOCKET_PATH" ]]; then
   DOCKER_SOCKET_PATH="/var/run/docker.sock"
 fi
+PROD_MODE=""
+for arg in "$@"; do
+  if [[ "$arg" == "--prod" ]]; then
+    PROD_MODE="1"
+    break
+  fi
+done
+
+if [[ -n "$PROD_MODE" ]]; then
+  COMPOSE_FILE="$ROOT_DIR/docker-compose.prod.yml"
+  if [[ ! -f "$COMPOSE_FILE" ]]; then
+    fail "Production compose file not found: $COMPOSE_FILE"
+  fi
+  echo "==> Running in PRODUCTION mode"
+fi
+
 if is_truthy_value "$RAW_SANDBOX_SETTING"; then
   SANDBOX_ENABLED="1"
 fi
@@ -192,6 +208,17 @@ mkdir -p "$OPENCLAW_WORKSPACE_DIR"
 mkdir -p "$OPENCLAW_CONFIG_DIR/identity"
 mkdir -p "$OPENCLAW_CONFIG_DIR/agents/main/agent"
 mkdir -p "$OPENCLAW_CONFIG_DIR/agents/main/sessions"
+
+if [[ -n "$PROD_MODE" ]]; then
+  if [[ ! -f "$OPENCLAW_CONFIG_DIR/agents/main/agent/MEMORY.md" ]]; then
+    echo "WARNING: MEMORY.md not found in $OPENCLAW_CONFIG_DIR/agents/main/agent/"
+    echo "Marie's long-term memory may be empty on startup."
+  fi
+  if [[ ! -f "$OPENCLAW_CONFIG_DIR/agents/main/agent/USER.md" ]]; then
+    echo "WARNING: USER.md not found in $OPENCLAW_CONFIG_DIR/agents/main/agent/"
+    echo "Marie's user behavioral model may be empty on startup."
+  fi
+fi
 
 export OPENCLAW_CONFIG_DIR
 export OPENCLAW_WORKSPACE_DIR
@@ -425,7 +452,14 @@ echo "Gateway token: $OPENCLAW_GATEWAY_TOKEN"
 echo "Tailscale exposure: Off (use host-level tailnet/Tailscale setup separately)."
 echo "Install Gateway daemon: No (managed by Docker Compose)"
 echo ""
-docker compose "${COMPOSE_ARGS[@]}" run --rm openclaw-cli onboard --mode local --no-install-daemon
+
+# SUPPORT FOR NON-INTERACTIVE MODE
+# If OPENCLAW_GATEWAY_TOKEN is set and config exists, we can skip explicit onboarding.
+if [[ -n "${OPENCLAW_GATEWAY_TOKEN:-}" && -f "$OPENCLAW_CONFIG_DIR/openclaw.json" ]]; then
+  echo "Onboarding skipped (token and config already present for non-interactive setup)."
+else
+  docker compose "${COMPOSE_ARGS[@]}" run --rm openclaw-cli onboard --mode local --no-install-daemon
+fi
 
 echo ""
 echo "==> Docker gateway defaults"
