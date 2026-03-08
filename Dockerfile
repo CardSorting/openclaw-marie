@@ -9,11 +9,11 @@ RUN corepack enable
 
 WORKDIR /app
 
-# Copy dependency files
+# Copy dependency files first for better caching
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY ui/package.json ./ui/package.json
 COPY patches ./patches
-COPY scripts ./scripts
+COPY scripts/copy-plugin-sdk-root-alias.mjs scripts/write-plugin-sdk-entry-dts.ts scripts/canvas-a2ui-copy.ts scripts/copy-hook-metadata.ts scripts/copy-export-html-templates.ts scripts/write-build-info.ts scripts/write-cli-startup-metadata.ts scripts/write-cli-compat.ts ./scripts/
 
 # Install dependencies
 RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
@@ -37,12 +37,13 @@ LABEL org.opencontainers.image.source="https://github.com/openclaw/openclaw" \
 
 WORKDIR /app
 
-# Install runtime essentials
+# Install runtime essentials and gosu for entrypoint permission handling
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   curl \
   age \
   git \
+  gosu \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy built assets from builder
@@ -51,6 +52,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/dist/control-ui ./ui/dist
 COPY --from=builder /app/openclaw.mjs ./
 COPY --from=builder /app/scripts/healthcheck.js ./scripts/healthcheck.js
+COPY --from=builder /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
 COPY --from=builder /app/extensions ./extensions
 COPY --from=builder /app/skills ./skills
 
@@ -59,11 +61,10 @@ RUN corepack enable && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 # Expose the CLI binary
 RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
-  && chmod 755 /app/openclaw.mjs
+  && chmod 755 /app/openclaw.mjs \
+  && chmod +x /app/scripts/docker-entrypoint.sh
 
 # Optionally install Chromium and Docker CLI (handled via build args if requested)
-# Note: In a true slim multi-stage, these should be carefully layered or separate images.
-# For compatibility with existing scripts, we keep them available as build-time opts.
 ARG OPENCLAW_INSTALL_BROWSER=""
 RUN if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
   apt-get update && \
@@ -85,10 +86,9 @@ RUN if [ -n "$OPENCLAW_INSTALL_DOCKER_CLI" ]; then \
 # Final security hardening
 ENV NODE_ENV=production
 RUN chown -R node:node /app
-USER node
 
 HEALTHCHECK --interval=2m --timeout=10s --start-period=30s --retries=3 \
   CMD ["node", "scripts/healthcheck.js"]
 
-ENTRYPOINT ["node", "openclaw.mjs"]
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 CMD ["gateway", "--allow-unconfigured"]
