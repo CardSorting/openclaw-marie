@@ -11,149 +11,52 @@
 
 **MarieCoder** is an elite AI engineering assistant designed for developers who demand speed, reliability, and code quality. It runs on your own devices and connects to the channels you already use (WhatsApp, Telegram, Slack, Discord, and more).
 
-## 🚀 Seamless 0-Touch QuickStart
-
-MarieCoder is designed to get you running in seconds. It automatically detects your environment, selects the best trending models, and configures your workspace.
-
-### 1. Install MarieCoder
-
-Requires **Node ≥22**.
-
-```bash
-npm install -g mariecoder@latest
-# or
-pnpm add -g mariecoder@latest
-```
-
-### 2. Set your API Key
-
-(OpenRouter, Anthropic, Gemini, OpenAI, or DeepSeek)
-
-```bash
-export OPENROUTER_API_KEY=your_key_here
-```
-
-### 3. Launch the Evolution
-
-```bash
-mariecoder setup --flow quickstart
-```
-
-The system will detect your key, select the #1 trending model (e.g., **MiniMax M2.5** or **DeepSeek V3.2**), and launch the TUI immediately.
-
 ---
 
-## ✨ Core Pillars of Excellence
+## 🚀 Quick Start
 
-### 🛡️ JoyZoning (Architectural Integrity)
+### 1. Local CLI (Node.js)
 
-Never let your codebase rot. JoyZoning enforces strict architectural boundaries and code quality standards in real-time. It uses a "strike-based" system to prevent architectural regressions, ensuring your project remains clean, modular, and maintainable.
-
-### 🧬 Skill Evolution (Adaptive Learning)
-
-MarieCoder doesn't just execute; it learns. **Skill Evolution** tracks success metrics, latency, and discovery rates across sessions. It strategically adapts its tool usage and reasoning patterns based on historical performance, evolving into a specialist for your specific codebase.
-
-### ⚡ DBPooling (High-Performance SQLite)
-
-Experience industrial-grade reliability with **DBPooling**. Our custom SQLite connection pooler manages concurrent read/write operations with Zero-Lock contention. Featuring Write-Ahead Logging (WAL) and automated busy-timeouts, it ensures your agent's memory is fast, persistent, and thread-safe.
-
-## Sponsors
-
-| OpenAI                                                            | Vercel                                                            | Blacksmith                                                                   | Convex                                                                |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| [![OpenAI](docs/assets/sponsors/openai.svg)](https://openai.com/) | [![Vercel](docs/assets/sponsors/vercel.svg)](https://vercel.com/) | [![Blacksmith](docs/assets/sponsors/blacksmith.svg)](https://blacksmith.sh/) | [![Convex](docs/assets/sponsors/convex.svg)](https://www.convex.dev/) |
-
-**Subscriptions (OAuth):**
-
-- **[OpenAI](https://openai.com/)** (ChatGPT/Codex)
-
-Model note: while many providers/models are supported, for the best experience and lower prompt-injection risk use the strongest latest-generation model available to you. See [Onboarding](https://docs.openclaw.ai/start/onboarding).
-
-## Models (selection + auth)
-
-- Models config + CLI: [Models](https://docs.openclaw.ai/concepts/models)
-- Auth profile rotation (OAuth vs API keys) + fallbacks: [Model failover](https://docs.openclaw.ai/concepts/model-failover)
-
-## Install (recommended)
-
-Runtime: **Node ≥22**.
+Get running in seconds with the automated onboarding flow. Requires **Node ≥22**.
 
 ```bash
 npm install -g openclaw@latest
-# or: pnpm add -g openclaw@latest
-
-openclaw onboard --flow quickstart --install-daemon
+export OPENROUTER_API_KEY=your_key_here
+openclaw setup --flow quickstart
 ```
 
-The wizard installs the Gateway daemon (launchd/systemd user service) so it stays running.
+### 2. Docker Deployment
 
-## Quick start (TL;DR)
-
-Runtime: **Node ≥22**.
-
-Full beginner guide (auth, pairing, channels): [Getting started](https://docs.openclaw.ai/start/getting-started)
+For isolated, enterprise-grade deployments, use our ready-to-deploy template.
 
 ```bash
-openclaw onboard --flow quickstart --install-daemon
-
-openclaw gateway --port 18789 --verbose
-
-# Send a message
-openclaw message send --to +1234567890 --message "Hello from OpenClaw"
-
-# Talk to the assistant (optionally deliver back to any connected channel: WhatsApp/Telegram/Slack/Discord/Google Chat/Signal/iMessage/BlueBubbles/IRC/Microsoft Teams/Matrix/Feishu/LINE/Mattermost/Nextcloud Talk/Nostr/Synology Chat/Tlon/Twitch/Zalo/Zalo Personal/WebChat)
-openclaw agent --message "Ship checklist" --thinking high
+./docker-setup.sh
 ```
 
-Upgrading? [Updating guide](https://docs.openclaw.ai/install/updating) (and run `openclaw doctor`).
+> [!NOTE]
+> See the [Docker Deployment Guide](docs/knowledgebase/deployment-docker.md) for manual `docker-compose.yml` templates and troubleshooting.
 
-## Development channels
+---
 
-- **stable**: tagged releases (`vYYYY.M.D` or `vYYYY.M.D-<patch>`), npm dist-tag `latest`.
-- **beta**: prerelease tags (`vYYYY.M.D-beta.N`), npm dist-tag `beta` (macOS app may be missing).
-- **dev**: moving head of `main`, npm dist-tag `dev` (when published).
+## 📚 Knowledgebase
 
-Switch channels (git + npm): `openclaw update --channel stable|beta|dev`.
-Details: [Development channels](https://docs.openclaw.ai/install/development-channels).
+We've broken down our advanced architecture and features into a manageable knowledgebase for easier navigation.
 
-## From source (development)
+### [🏗️ Engineering Pillars & Advanced Features](docs/knowledgebase/engineering-pillars.md)
 
-Prefer `pnpm` for builds from source. Bun is optional for running TypeScript directly.
+Learn about **JoyZoning** (Architectural Integrity), **Skill Evolution** (Adaptive Learning), **DBPooling** (High-Performance SQLite), **ACP Topics**, and **SecretRef**.
 
-```bash
-git clone https://github.com/openclaw/openclaw.git
-cd openclaw
+### [🛡️ Security Model & Architectural Safety](docs/knowledgebase/security-model.md)
 
-pnpm install
-pnpm ui:build # auto-installs UI deps on first run
-pnpm build
+Deep dive into our **Trust-But-Verify** model, **Sandbox Mode**, **DM Pairing**, and **Elevated Access** protocols.
 
-# Optimized native setup (recommmended for source installs)
-pnpm openclaw setup --native
+### [📱 Ecosystem & Channel Integration](docs/knowledgebase/channels-and-ecosystem.md)
 
-pnpm openclaw onboard --install-daemon
+Explore the MarieCoder ecosystem including the **macOS Menu Bar App**, **iOS/Android Nodes**, **Browser Control**, and detailed configuration for **WhatsApp, Telegram, Slack, Discord, Signal, and iMessage**.
 
-# Dev loop (auto-reload on TS changes)
-pnpm gateway:watch
-```
+---
 
-Note: `pnpm openclaw ...` runs TypeScript directly (via `tsx`). `pnpm build` produces `dist/` for running via Node / the packaged `openclaw` binary.
-
-## Security defaults (DM access)
-
-OpenClaw connects to real messaging surfaces. Treat inbound DMs as **untrusted input**.
-
-Full security guide: [Security](https://docs.openclaw.ai/gateway/security)
-
-Default behavior on Telegram/WhatsApp/Signal/iMessage/Microsoft Teams/Discord/Google Chat/Slack:
-
-- **DM pairing** (`dmPolicy="pairing"` / `channels.discord.dmPolicy="pairing"` / `channels.slack.dmPolicy="pairing"`; legacy: `channels.discord.dm.policy`, `channels.slack.dm.policy`): unknown senders receive a short pairing code and the bot does not process their message.
-- Approve with: `openclaw pairing approve <channel> <code>` (then the sender is added to a local allowlist store).
-- Public inbound DMs require an explicit opt-in: set `dmPolicy="open"` and include `"*"` in the channel allowlist (`allowFrom` / `channels.discord.allowFrom` / `channels.slack.allowFrom`; legacy: `channels.discord.dm.allowFrom`, `channels.slack.dm.policy`).
-
-Run `openclaw doctor` to surface risky/misconfigured DM policies.
-
-## ✨ Key Features
+## ✨ Key Features At a Glance
 
 - **🛡️ JoyZoning** — Real-time architectural enforcement and code quality control.
 - **🧬 Skill Evolution** — Adaptive learning that optimizes performance over time.
@@ -165,308 +68,37 @@ Run `openclaw doctor` to surface risky/misconfigured DM policies.
 
 ---
 
-## 📱 Ecosystem & Companion Apps
+## 🛠️ Operations & Reference
 
-MarieCoder isn't just a CLI; it's a complete engineering ecosystem.
-
-### **macOS App (Menu Bar)**
-
-The powerhouse control plane for your desktop. Features Voice Wake, PTT, and a remote gateway bridge over SSH.
-
-### **iOS & Android Nodes**
-
-Turn your mobile devices into powerful sensors. Expose camera, location, and system notifications to your agent with end-to-end encryption.
-
-### **Browser Control**
-
-Dedicated managed Chromium instance with CDP control. Capture snapshots, automate uploads, and scrape with precision.
+- **[Full Documentation](https://docs.openclaw.ai)** — Comprehensive reference, guides, and API specs.
+- **[Configuration Reference](https://docs.openclaw.ai/gateway/configuration)** — Every key and example for `openclaw.json`.
+- **[Troubleshooting Guide](https://docs.openclaw.ai/channels/troubleshooting)** — Debug common connection and runtime issues.
+- **[Remote Access](https://docs.openclaw.ai/gateway/remote)** — Tunnels, Tailscale, and SSH setup.
 
 ---
 
-## 🔒 Security & Architectural Safety
+## Sponsors
 
-MarieCoder implements a **Trust-But-Verify** model.
+| OpenAI                                                            | Vercel                                                            | Blacksmith                                                                   | Convex                                                                |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [![OpenAI](docs/assets/sponsors/openai.svg)](https://openai.com/) | [![Vercel](docs/assets/sponsors/vercel.svg)](https://vercel.com/) | [![Blacksmith](docs/assets/sponsors/blacksmith.svg)](https://blacksmith.sh/) | [![Convex](docs/assets/sponsors/convex.svg)](https://www.convex.dev/) |
 
-- **Sandbox Mode:** Runs non-main sessions in isolated Docker containers.
-- **DM Pairing:** Prevents unauthorized access on public channels via a secure pairing protocol.
-- **Elevated Access:** Per-session toggles for host-level permissions, protected by JoyZoning policies.
+---
 
-## Remote Gateway (Linux is great)
+## 🤝 Contributing & Community
 
-It’s perfectly fine to run the Gateway on a small Linux instance. Clients (macOS app, CLI, WebChat) can connect over **Tailscale Serve/Funnel** or **SSH tunnels**, and you can still pair device nodes (macOS/iOS/Android) to execute device‑local actions when needed.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
-- **Gateway host** runs the exec tool and channel connections by default.
-- **Device nodes** run device‑local actions (`system.run`, camera, screen recording, notifications) via `node.invoke`.
-  In short: exec runs where the Gateway lives; device actions run where the device lives.
+- **Discord**: [Join our developer community](https://mariecoder.com/discord)
+- **Twitter**: [@MarieCoderAI](https://twitter.com/MarieCoderAI)
+- **GitHub**: [OpenClaw Repository](https://github.com/openclaw/openclaw)
 
-Details: [Remote access](https://docs.openclaw.ai/gateway/remote) · [Nodes](https://docs.openclaw.ai/nodes) · [Security](https://docs.openclaw.ai/gateway/security)
+---
 
-## macOS permissions via the Gateway protocol
-
-The macOS app can run in **node mode** and advertises its capabilities + permission map over the Gateway WebSocket (`node.list` / `node.describe`). Clients can then execute local actions via `node.invoke`:
-
-- `system.run` runs a local command and returns stdout/stderr/exit code; set `needsScreenRecording: true` to require screen-recording permission (otherwise you’ll get `PERMISSION_MISSING`).
-- `system.notify` posts a user notification and fails if notifications are denied.
-- `canvas.*`, `camera.*`, `screen.record`, and `location.get` are also routed via `node.invoke` and follow TCC permission status.
-
-Elevated bash (host permissions) is separate from macOS TCC:
-
-- Use `/elevated on|off` to toggle per‑session elevated access when enabled + allowlisted.
-- Gateway persists the per‑session toggle via `sessions.patch` (WS method) alongside `thinkingLevel`, `verboseLevel`, `model`, `sendPolicy`, and `groupActivation`.
-
-Details: [Nodes](https://docs.openclaw.ai/nodes) · [macOS app](https://docs.openclaw.ai/platforms/macos) · [Gateway protocol](https://docs.openclaw.ai/concepts/architecture)
-
-## Agent to Agent (sessions\_\* tools)
-
-- Use these to coordinate work across sessions without jumping between chat surfaces.
-- `sessions_list` — discover active sessions (agents) and their metadata.
-- `sessions_history` — fetch transcript logs for a session.
-- `sessions_send` — message another session; optional reply‑back ping‑pong + announce step (`REPLY_SKIP`, `ANNOUNCE_SKIP`).
-
-Details: [Session tools](https://docs.openclaw.ai/concepts/session-tool)
-
-## Skills registry (ClawHub)
-
-ClawHub is a minimal skill registry. With ClawHub enabled, the agent can search for skills automatically and pull in new ones as needed.
-
-[ClawHub](https://clawhub.com)
-
-## Chat commands
-
-Send these in WhatsApp/Telegram/Slack/Google Chat/Microsoft Teams/WebChat (group commands are owner-only):
-
-- `/status` — compact session status (model + tokens, cost when available)
-- `/new` or `/reset` — reset the session
-- `/compact` — compact session context (summary)
-- `/think <level>` — off|minimal|low|medium|high|xhigh (GPT-5.2 + Codex models only)
-- `/verbose on|off`
-- `/usage off|tokens|full` — per-response usage footer
-- `/restart` — restart the gateway (owner-only in groups)
-- `/activation mention|always` — group activation toggle (groups only)
-
-## Apps (optional)
-
-The Gateway alone delivers a great experience. All apps are optional and add extra features.
-
-If you plan to build/run companion apps, follow the platform runbooks below.
-
-### macOS (OpenClaw.app) (optional)
-
-- Menu bar control for the Gateway and health.
-- Voice Wake + push-to-talk overlay.
-- WebChat + debug tools.
-- Remote gateway control over SSH.
-
-Note: signed builds required for macOS permissions to stick across rebuilds (see `docs/mac/permissions.md`).
-
-### iOS node (optional)
-
-- Pairs as a node over the Gateway WebSocket (device pairing).
-- Voice trigger forwarding + Canvas surface.
-- Controlled via `openclaw nodes …`.
-
-Runbook: [iOS connect](https://docs.openclaw.ai/platforms/ios).
-
-### Android node (optional)
-
-- Pairs as a WS node via device pairing (`openclaw devices ...`).
-- Exposes Connect/Chat/Voice tabs plus Canvas, Camera, Screen capture, and Android device command families.
-- Runbook: [Android connect](https://docs.openclaw.ai/platforms/android).
-
-## Agent workspace + skills
-
-- Workspace root: `~/.openclaw/workspace` (configurable via `agents.defaults.workspace`).
-- Injected prompt files: `AGENTS.md`, `SOUL.md`, `TOOLS.md`.
-- Skills: `~/.openclaw/workspace/skills/<skill>/SKILL.md`.
-
-## Configuration
-
-Minimal `~/.openclaw/openclaw.json` (model + defaults):
-
-```json5
-{
-  agent: {
-    model: "anthropic/claude-opus-4-6",
-  },
-}
-```
-
-[Full configuration reference (all keys + examples).](https://docs.openclaw.ai/gateway/configuration)
-
-## Security model (important)
-
-- **Default:** tools run on the host for the **main** session, so the agent has full access when it’s just you.
-- **Group/channel safety:** set `agents.defaults.sandbox.mode: "non-main"` to run **non‑main sessions** (groups/channels) inside per‑session Docker sandboxes; bash then runs in Docker for those sessions.
-- **Sandbox defaults:** allowlist `bash`, `process`, `read`, `write`, `edit`, `sessions_list`, `sessions_history`, `sessions_send`, `sessions_spawn`; denylist `browser`, `canvas`, `nodes`, `cron`, `discord`, `gateway`.
-
-Details: [Security guide](https://docs.openclaw.ai/gateway/security) · [Docker + sandboxing](https://docs.openclaw.ai/install/docker) · [Sandbox config](https://docs.openclaw.ai/gateway/configuration)
-
-### [WhatsApp](https://docs.openclaw.ai/channels/whatsapp)
-
-- Link the device: `pnpm openclaw channels login` (stores creds in `~/.openclaw/credentials`).
-- Allowlist who can talk to the assistant via `channels.whatsapp.allowFrom`.
-- If `channels.whatsapp.groups` is set, it becomes a group allowlist; include `"*"` to allow all.
-
-### [Telegram](https://docs.openclaw.ai/channels/telegram)
-
-- Set `TELEGRAM_BOT_TOKEN` or `channels.telegram.botToken` (env wins).
-- Optional: set `channels.telegram.groups` (with `channels.telegram.groups."*".requireMention`); when set, it is a group allowlist (include `"*"` to allow all). Also `channels.telegram.allowFrom` or `channels.telegram.webhookUrl` + `channels.telegram.webhookSecret` as needed.
-
-```json5
-{
-  channels: {
-    telegram: {
-      botToken: "123456:ABCDEF",
-    },
-  },
-}
-```
-
-### [Slack](https://docs.openclaw.ai/channels/slack)
-
-- Set `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` (or `channels.slack.botToken` + `channels.slack.appToken`).
-
-### [Discord](https://docs.openclaw.ai/channels/discord)
-
-- Set `DISCORD_BOT_TOKEN` or `channels.discord.token` (env wins).
-- Optional: set `commands.native`, `commands.text`, or `commands.useAccessGroups`, plus `channels.discord.allowFrom`, `channels.discord.guilds`, or `channels.discord.mediaMaxMb` as needed.
-
-```json5
-{
-  channels: {
-    discord: {
-      token: "1234abcd",
-    },
-  },
-}
-```
-
-### [Signal](https://docs.openclaw.ai/channels/signal)
-
-- Requires `signal-cli` and a `channels.signal` config section.
-
-### [BlueBubbles (iMessage)](https://docs.openclaw.ai/channels/bluebubbles)
-
-- **Recommended** iMessage integration.
-- Configure `channels.bluebubbles.serverUrl` + `channels.bluebubbles.password` and a webhook (`channels.bluebubbles.webhookPath`).
-- The BlueBubbles server runs on macOS; the Gateway can run on macOS or elsewhere.
-
-### [iMessage (legacy)](https://docs.openclaw.ai/channels/imessage)
-
-- Legacy macOS-only integration via `imsg` (Messages must be signed in).
-- If `channels.imessage.groups` is set, it becomes a group allowlist; include `"*"` to allow all.
-
-### [Microsoft Teams](https://docs.openclaw.ai/channels/msteams)
-
-- Configure a Teams app + Bot Framework, then add a `msteams` config section.
-- Allowlist who can talk via `msteams.allowFrom`; group access via `msteams.groupAllowFrom` or `msteams.groupPolicy: "open"`.
-
-### [WebChat](https://docs.openclaw.ai/web/webchat)
-
-- Uses the Gateway WebSocket; no separate WebChat port/config.
-
-Browser control (optional):
-
-```json5
-{
-  browser: {
-    enabled: true,
-    color: "#FF4500",
-  },
-}
-```
-
-## Docs
-
-Use these when you’re past the onboarding flow and want the deeper reference.
-
-- [Start with the docs index for navigation and “what’s where.”](https://docs.openclaw.ai)
-- [Read the architecture overview for the gateway + protocol model.](https://docs.openclaw.ai/concepts/architecture)
-- [Use the full configuration reference when you need every key and example.](https://docs.openclaw.ai/gateway/configuration)
-- [Run the Gateway by the book with the operational runbook.](https://docs.openclaw.ai/gateway)
-- [Learn how the Control UI/Web surfaces work and how to expose them safely.](https://docs.openclaw.ai/web)
-- [Understand remote access over SSH tunnels or tailnets.](https://docs.openclaw.ai/gateway/remote)
-- [Follow the onboarding wizard flow for a guided setup.](https://docs.openclaw.ai/start/wizard)
-- [Wire external triggers via the webhook surface.](https://docs.openclaw.ai/automation/webhook)
-- [Set up Gmail Pub/Sub triggers.](https://docs.openclaw.ai/automation/gmail-pubsub)
-- [Learn the macOS menu bar companion details.](https://docs.openclaw.ai/platforms/mac/menu-bar)
-- [Platform guides: Windows (WSL2)](https://docs.openclaw.ai/platforms/windows), [Linux](https://docs.openclaw.ai/platforms/linux), [macOS](https://docs.openclaw.ai/platforms/macos), [iOS](https://docs.openclaw.ai/platforms/ios), [Android](https://docs.openclaw.ai/platforms/android)
-- [Debug common failures with the troubleshooting guide.](https://docs.openclaw.ai/channels/troubleshooting)
-- [Review security guidance before exposing anything.](https://docs.openclaw.ai/gateway/security)
-
-## Advanced docs (discovery + control)
-
-- [Discovery + transports](https://docs.openclaw.ai/gateway/discovery)
-- [Bonjour/mDNS](https://docs.openclaw.ai/gateway/bonjour)
-- [Gateway pairing](https://docs.openclaw.ai/gateway/pairing)
-- [Remote gateway README](https://docs.openclaw.ai/gateway/remote-gateway-readme)
-- [Control UI](https://docs.openclaw.ai/web/control-ui)
-- [Dashboard](https://docs.openclaw.ai/web/dashboard)
-
-## Operations & troubleshooting
-
-- [Health checks](https://docs.openclaw.ai/gateway/health)
-- [Gateway lock](https://docs.openclaw.ai/gateway/gateway-lock)
-- [Background process](https://docs.openclaw.ai/gateway/background-process)
-- [Browser troubleshooting (Linux)](https://docs.openclaw.ai/tools/browser-linux-troubleshooting)
-- [Logging](https://docs.openclaw.ai/logging)
-
-## Deep dives
-
-- [Agent loop](https://docs.openclaw.ai/concepts/agent-loop)
-- [Presence](https://docs.openclaw.ai/concepts/presence)
-- [TypeBox schemas](https://docs.openclaw.ai/concepts/typebox)
-- [RPC adapters](https://docs.openclaw.ai/reference/rpc)
-- [Queue](https://docs.openclaw.ai/concepts/queue)
-
-## Workspace & skills
-
-- [Skills config](https://docs.openclaw.ai/tools/skills-config)
-- [Default AGENTS](https://docs.openclaw.ai/reference/AGENTS.default)
-- [Templates: AGENTS](https://docs.openclaw.ai/reference/templates/AGENTS)
-- [Templates: BOOTSTRAP](https://docs.openclaw.ai/reference/templates/BOOTSTRAP)
-- [Templates: IDENTITY](https://docs.openclaw.ai/reference/templates/IDENTITY)
-- [Templates: SOUL](https://docs.openclaw.ai/reference/templates/SOUL)
-- [Templates: TOOLS](https://docs.openclaw.ai/reference/templates/TOOLS)
-- [Templates: USER](https://docs.openclaw.ai/reference/templates/USER)
-
-## Platform internals
-
-- [macOS dev setup](https://docs.openclaw.ai/platforms/mac/dev-setup)
-- [macOS menu bar](https://docs.openclaw.ai/platforms/mac/menu-bar)
-- [macOS voice wake](https://docs.openclaw.ai/platforms/mac/voicewake)
-- [iOS node](https://docs.openclaw.ai/platforms/ios)
-- [Android node](https://docs.openclaw.ai/platforms/android)
-- [Windows (WSL2)](https://docs.openclaw.ai/platforms/windows)
-- [Linux app](https://docs.openclaw.ai/platforms/linux)
-
-## Email hooks (Gmail)
-
-- [docs.openclaw.ai/gmail-pubsub](https://docs.openclaw.ai/automation/gmail-pubsub)
-
-## Molty
-
-OpenClaw was built for **Molty**, a space lobster AI assistant. 🦞
-by Peter Steinberger and the community.
-
-- [openclaw.ai](https://openclaw.ai)
-- [soul.md](https://soul.md)
-- [steipete.me](https://steipete.me)
-- [@openclaw](https://x.com/openclaw)
-
-## Community
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines, maintainers, and how to submit PRs.
-AI/vibe-coded PRs welcome! 🤖
-
-Special thanks to [Mario Zechner](https://mariozechner.at/) for his support and for
-[pi-mono](https://github.com/badlogic/pi-mono).
-Special thanks to Adam Doppelt for lobster.bot.
-
-Thanks to all clawtributors:
-
-<p align="left">
-  <a href="https://github.com/steipete"><img src="https://avatars.githubusercontent.com/u/58493?v=4&s=48" width="48" height="48" alt="steipete" title="steipete"/></a> <a href="https://github.com/vincentkoc"><img src="https://avatars.githubusercontent.com/u/25068?v=4&s=48" width="48" height="48" alt="vincentkoc" title="vincentkoc"/></a> <a href="https://github.com/vignesh07"><img src="https://avatars.githubusercontent.com/u/1436853?v=4&s=48" width="48" height="48" alt="vignesh07" title="vignesh07"/></a> <a href="https://github.com/obviyus"><img src="https://avatars.githubusercontent.com/u/22031114?v=4&s=48" width="48" height="48" alt="obviyus" title="obviyus"/></a> <a href="https://github.com/mbelinky"><img src="https://avatars.githubusercontent.com/u/132747814?v=4&s=48" width="48" height="48" alt="Mariano Belinky" title="Mariano Belinky"/></a> <a href="https://github.com/sebslight"><img src="https://avatars.githubusercontent.com/u/19554889?v=4&s=48" width="48" height="48" alt="sebslight" title="sebslight"/></a> <a href="https://github.com/gumadeiras"><img src="https://avatars.githubusercontent.com/u/5599352?v=4&s=48" width="48" height="48" alt="gumadeiras" title="gumadeiras"/></a> <a href="https://github.com/Takhoffman"><img src="https://avatars.githubusercontent.com/u/781889?v=4&s=48" width="48" height="48" alt="Takhoffman" title="Takhoffman"/></a> <a href="https://github.com/thewilloftheshadow"><img src="https://avatars.githubusercontent.com/u/35580099?v=4&s=48" width="48" height="48" alt="thewilloftheshadow" title="thewilloftheshadow"/></a> <a href="https://github.com/cpojer"><img src="https://avatars.githubusercontent.com/u/13352?v=4&s=48" width="48" height="48" alt="cpojer" title="cpojer"/></a>
+<p align="center">
+  Built with 💜 by the MarieCoder Team.  
+  &copy; 2026 MarieCoder. Released under the MIT License.
+</p>
   <a href="https://github.com/tyler6204"><img src="https://avatars.githubusercontent.com/u/64381258?v=4&s=48" width="48" height="48" alt="tyler6204" title="tyler6204"/></a> <a href="https://github.com/joshp123"><img src="https://avatars.githubusercontent.com/u/1497361?v=4&s=48" width="48" height="48" alt="joshp123" title="joshp123"/></a> <a href="https://github.com/Glucksberg"><img src="https://avatars.githubusercontent.com/u/80581902?v=4&s=48" width="48" height="48" alt="Glucksberg" title="Glucksberg"/></a> <a href="https://github.com/mcaxtr"><img src="https://avatars.githubusercontent.com/u/7562095?v=4&s=48" width="48" height="48" alt="mcaxtr" title="mcaxtr"/></a> <a href="https://github.com/quotentiroler"><img src="https://avatars.githubusercontent.com/u/40643627?v=4&s=48" width="48" height="48" alt="quotentiroler" title="quotentiroler"/></a> <a href="https://github.com/osolmaz"><img src="https://avatars.githubusercontent.com/u/2453968?v=4&s=48" width="48" height="48" alt="osolmaz" title="osolmaz"/></a> <a href="https://github.com/Sid-Qin"><img src="https://avatars.githubusercontent.com/u/201593046?v=4&s=48" width="48" height="48" alt="Sid-Qin" title="Sid-Qin"/></a> <a href="https://github.com/joshavant"><img src="https://avatars.githubusercontent.com/u/830519?v=4&s=48" width="48" height="48" alt="joshavant" title="joshavant"/></a> <a href="https://github.com/shakkernerd"><img src="https://avatars.githubusercontent.com/u/165377636?v=4&s=48" width="48" height="48" alt="shakkernerd" title="shakkernerd"/></a> <a href="https://github.com/bmendonca3"><img src="https://avatars.githubusercontent.com/u/208517100?v=4&s=48" width="48" height="48" alt="bmendonca3" title="bmendonca3"/></a>
   <a href="https://github.com/mukhtharcm"><img src="https://avatars.githubusercontent.com/u/56378562?v=4&s=48" width="48" height="48" alt="mukhtharcm" title="mukhtharcm"/></a> <a href="https://github.com/zerone0x"><img src="https://avatars.githubusercontent.com/u/39543393?v=4&s=48" width="48" height="48" alt="zerone0x" title="zerone0x"/></a> <a href="https://github.com/mcinteerj"><img src="https://avatars.githubusercontent.com/u/3613653?v=4&s=48" width="48" height="48" alt="mcinteerj" title="mcinteerj"/></a> <a href="https://github.com/ngutman"><img src="https://avatars.githubusercontent.com/u/1540134?v=4&s=48" width="48" height="48" alt="ngutman" title="ngutman"/></a> <a href="https://github.com/lailoo"><img src="https://avatars.githubusercontent.com/u/20536249?v=4&s=48" width="48" height="48" alt="lailoo" title="lailoo"/></a> <a href="https://github.com/arosstale"><img src="https://avatars.githubusercontent.com/u/117890364?v=4&s=48" width="48" height="48" alt="arosstale" title="arosstale"/></a> <a href="https://github.com/rodrigouroz"><img src="https://avatars.githubusercontent.com/u/384037?v=4&s=48" width="48" height="48" alt="rodrigouroz" title="rodrigouroz"/></a> <a href="https://github.com/robbyczgw-cla"><img src="https://avatars.githubusercontent.com/u/239660374?v=4&s=48" width="48" height="48" alt="robbyczgw-cla" title="robbyczgw-cla"/></a> <a href="https://github.com/0xRaini"><img src="https://avatars.githubusercontent.com/u/190923101?v=4&s=48" width="48" height="48" alt="Elonito" title="Elonito"/></a> <a href="https://github.com/Clawborn"><img src="https://avatars.githubusercontent.com/u/261310391?v=4&s=48" width="48" height="48" alt="Clawborn" title="Clawborn"/></a>
   <a href="https://github.com/yinghaosang"><img src="https://avatars.githubusercontent.com/u/261132136?v=4&s=48" width="48" height="48" alt="yinghaosang" title="yinghaosang"/></a> <a href="https://github.com/BunsDev"><img src="https://avatars.githubusercontent.com/u/68980965?v=4&s=48" width="48" height="48" alt="BunsDev" title="BunsDev"/></a> <a href="https://github.com/christianklotz"><img src="https://avatars.githubusercontent.com/u/69443?v=4&s=48" width="48" height="48" alt="christianklotz" title="christianklotz"/></a> <a href="https://github.com/echoVic"><img src="https://avatars.githubusercontent.com/u/16428813?v=4&s=48" width="48" height="48" alt="echoVic" title="echoVic"/></a> <a href="https://github.com/coygeek"><img src="https://avatars.githubusercontent.com/u/65363919?v=4&s=48" width="48" height="48" alt="coygeek" title="coygeek"/></a> <a href="https://github.com/roshanasingh4"><img src="https://avatars.githubusercontent.com/u/88576930?v=4&s=48" width="48" height="48" alt="roshanasingh4" title="roshanasingh4"/></a> <a href="https://github.com/mneves75"><img src="https://avatars.githubusercontent.com/u/2423436?v=4&s=48" width="48" height="48" alt="mneves75" title="mneves75"/></a> <a href="https://github.com/joaohlisboa"><img src="https://avatars.githubusercontent.com/u/8200873?v=4&s=48" width="48" height="48" alt="joaohlisboa" title="joaohlisboa"/></a> <a href="https://github.com/bohdanpodvirnyi"><img src="https://avatars.githubusercontent.com/u/31819391?v=4&s=48" width="48" height="48" alt="bohdanpodvirnyi" title="bohdanpodvirnyi"/></a> <a href="https://github.com/Nachx639"><img src="https://avatars.githubusercontent.com/u/71144023?v=4&s=48" width="48" height="48" alt="nachx639" title="nachx639"/></a>
