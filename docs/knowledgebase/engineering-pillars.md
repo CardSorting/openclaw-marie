@@ -8,6 +8,7 @@ MarieCoder is built on three core technical pillars and advanced features that e
 
 Maintain absolute architectural purity. JoyZoning enforces strict layer boundaries and dependency rules in real-time. Using a "strike-based" system, it prevents architectural regressions and protects against library-boundary violations, ensuring your codebase evolves with integrity.
 
+- **[Deep Dive: JoyZoning Architectural Design](../technical-design/joyzoning-architectural-integrity.md)**
 - **Enforces Layer Boundaries**: Prevents business logic from leaking into UI components or database layers.
 - **Dependency Guarding**: Blocks unauthorized third-party library injections in real-time.
 - **Strike-Based Protection**: Identifies and halts regressive patterns before they reach your git history.
@@ -16,6 +17,7 @@ Maintain absolute architectural purity. JoyZoning enforces strict layer boundari
 
 Driven by the `StrategicEvolutionStore`, the agent evolves its behavior based on your feedback:
 
+- **[Deep Dive: Skill Evolution Strategy](../technical-design/skill-evolution-adaptive-learning.md)**
 - **Metric Tracking**: Monitors sentiment, discovery rates, and tool success to refine its approach.
 - **Autonomous Adaptation**: Dynamically adjusts tool parameters and execution strategies to minimize latency and maximize accuracy.
 - **Persistent Memory**: Learns your project's nuances over time, becoming more efficient with every session.
@@ -24,6 +26,7 @@ Driven by the `StrategicEvolutionStore`, the agent evolves its behavior based on
 
 Experience industrial-grade reliability with the `SqliteConnectionPool`:
 
+- **[Deep Dive: DBPooling Concurrency Strategy](../technical-design/dbpooling-high-performance-persistence.md)**
 - **Thread-Safe Concurrency**: Uses WAL (Write-Ahead Logging) for lightning-fast reads and writes.
 - **Write-Mutex Serialization**: Guarantees data integrity during high-concurrency operations.
 - **Atomic Persistence**: Ensures your agent's state and memory are never corrupted, even during hard restarts.
@@ -36,6 +39,7 @@ Experience industrial-grade reliability with the `SqliteConnectionPool`:
 
 MarieCoder introduces **ACP Topics**, enabling persistent channel and thread bindings.
 
+- **[Deep Dive: ACP Durable Routing Design](../technical-design/acp-topics-durable-agent-routing.md)**
 - **Durable Routing**: Bind specific Discord channels or Telegram topics to dedicated agents.
 - **Context Continuity**: Agent configurations and session states survive restarts, ensuring consistent behavior across distributed interfaces.
 
@@ -43,6 +47,7 @@ MarieCoder introduces **ACP Topics**, enabling persistent channel and thread bin
 
 Enterprise-grade security for your credentials.
 
+- **[Deep Dive: SecretRef Security Architecture](../technical-design/secretref-enterprise-security.md)**
 - **Zero-Leaked Keys**: Support for `SecretRef` across 60+ credential targets.
 - **Granular Management**: Use `openclaw secrets` to plan, apply, and audit your API keys and tokens without ever exposing them in plaintext configs.
 
@@ -52,6 +57,7 @@ Enterprise-grade security for your credentials.
 
 MarieCoder is highly customizable via your workspace configuration.
 
+- **[Deep Dive: Workspace & Identity Strategy](../technical-design/workspace-customization-identity.md)**
 - **Workspace Root:** `~/.openclaw/workspace` (configurable via `agents.defaults.workspace`).
 - **Prompt Files:** You can inject custom behaviors by editing the following files in your workspace:
   - `AGENTS.md`: Defines the global agent personality and constraints.
