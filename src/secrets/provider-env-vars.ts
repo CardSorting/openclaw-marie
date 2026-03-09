@@ -24,6 +24,8 @@ export const PROVIDER_ENV_VARS: Record<string, readonly string[]> = {
   volcengine: ["VOLCANO_ENGINE_API_KEY"],
   byteplus: ["BYTEPLUS_API_KEY"],
   deepseek: ["DEEPSEEK_API_KEY"],
+  perplexity: ["PERPLEXITY_API_KEY"],
+  brave: ["BRAVE_API_KEY"],
 };
 
 export function listKnownSecretEnvVarNames(): string[] {

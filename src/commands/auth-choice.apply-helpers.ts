@@ -5,6 +5,7 @@ import {
   type SecretInput,
   type SecretRef,
 } from "../config/types.secrets.js";
+import { upsertSharedEnvVar } from "../infra/env-file.js";
 import { encodeJsonPointerToken } from "../secrets/json-pointer.js";
 import { PROVIDER_ENV_VARS } from "../secrets/provider-env-vars.js";
 import {
@@ -485,9 +486,17 @@ export async function ensureApiKeyFromEnvOrPrompt(params: {
   secretInputMode?: SecretInputMode;
   setCredential: (apiKey: SecretInput, mode?: SecretInputMode) => Promise<void>;
 }): Promise<string> {
+  const { resolveProviderConsoleUrl, openProviderConsole } = await import("./onboard-helpers.js");
+  const consoleUrl = resolveProviderConsoleUrl(params.provider);
+
   const selectedMode = await resolveSecretInputModeForEnvSelection({
     prompter: params.prompter,
     explicitMode: params.secretInputMode,
+    copy: {
+      plaintextHint:
+        "Save key inside Marie's local settings file (Easiest — recommended for most users)",
+      refHint: "Use a system environment variable (Advanced — more secure, best for servers)",
+    },
   });
   const envKey = resolveEnvApiKey(params.provider);
 
@@ -522,11 +531,36 @@ export async function ensureApiKeyFromEnvOrPrompt(params: {
     }
   }
 
+  if (consoleUrl) {
+    const helpMe = await params.prompter.confirm({
+      message: `Need help getting your ${params.provider} API key?`,
+      initialValue: false,
+    });
+    if (helpMe) {
+      await params.prompter.note(`Opening ${consoleUrl} in your browser…`, "API Key Helper");
+      await openProviderConsole(params.provider);
+    }
+  }
+
   const key = await params.prompter.text({
     message: params.promptMessage,
     validate: params.validate,
   });
   const apiKey = params.normalize(String(key ?? ""));
+
+  if (selectedMode === "plaintext" && !envKey) {
+    const envVar = PROVIDER_ENV_VARS[params.provider]?.[0];
+    if (envVar) {
+      const saveToEnv = await params.prompter.confirm({
+        message: `Save this key to your .env file? (Enables auto-detection next time)`,
+        initialValue: true,
+      });
+      if (saveToEnv) {
+        upsertSharedEnvVar({ key: envVar, value: apiKey });
+      }
+    }
+  }
+
   await params.setCredential(apiKey, selectedMode);
   return apiKey;
 }

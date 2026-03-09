@@ -334,7 +334,10 @@ async function readFileProviderPayload(params: {
       ]);
 
       // Triple-Down: Decrypt if necessary
-      const payload = await decryptIfNecessary(secureFilePath, Buffer.from(rawBuffer as Uint8Array));
+      const payload = await decryptIfNecessary(
+        secureFilePath,
+        Buffer.from(rawBuffer as Uint8Array),
+      );
 
       if (payload.byteLength > maxBytes) {
         throw new Error(`File provider "${params.providerName}" exceeded maxBytes (${maxBytes}).`);

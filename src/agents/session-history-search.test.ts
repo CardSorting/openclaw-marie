@@ -9,7 +9,9 @@ describe("session-history-search", () => {
   });
 
   it("indexes a session without error", async () => {
-    await expect(historySearch.indexSession("session-1", [{ role: "user", content: "hello" }])).resolves.toBeUndefined();
+    await expect(
+      historySearch.indexSession("session-1", [{ role: "user", content: "hello" }]),
+    ).resolves.toBeUndefined();
   });
 
   it("searches history and returns results (placeholder)", async () => {
@@ -18,6 +20,8 @@ describe("session-history-search", () => {
   });
 
   it("snapshots session summary without error", async () => {
-    await expect(historySearch.snapshotSessionSummary("session-1", "A good session.")).resolves.toBeUndefined();
+    await expect(
+      historySearch.snapshotSessionSummary("session-1", "A good session."),
+    ).resolves.toBeUndefined();
   });
 });

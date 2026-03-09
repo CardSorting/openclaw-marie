@@ -3,7 +3,9 @@
 This guide covers the deployment of a production-hardened Marie agent using Docker.
 
 ## Production Profile
+
 The production environment is configured with the following hardening measures:
+
 - **Multi-Stage Build**: Minimized image size and reduced attack surface.
 - **Read-Only Root Filesystem**: The container filesystem is locked down.
 - **Resource Limits**: CPU and memory limits are enforced via Docker Compose.
@@ -13,6 +15,7 @@ The production environment is configured with the following hardening measures:
 ## Advanced Security
 
 The production deployment includes several "Double Down" security measures:
+
 - **Custom Seccomp Profile**: Restricts host syscalls to the bare minimum required by Node.js.
 - **PII Redaction**: Automatically scrubs emails and API keys from agent memory before persistence.
 - **Deep Injection Scanning**: Active detection of many-shot jailbreaks and obfuscation attempts.
@@ -23,6 +26,7 @@ The production deployment includes several "Double Down" security measures:
 
 1. **Configure Environment**:
    Create a `.env` file with your production tokens:
+
    ```bash
    OPENCLAW_GATEWAY_TOKEN=your-secure-token
    OPENCLAW_CONFIG_DIR=./data/config
@@ -31,6 +35,7 @@ The production deployment includes several "Double Down" security measures:
 
 2. **Run Setup**:
    Use the hardened setup script:
+
    ```bash
    ./docker-setup.sh --prod
    ```
@@ -42,9 +47,12 @@ The production deployment includes several "Double Down" security measures:
    ```
 
 ## Secrets Management
+
 For maximum security, avoid plaintext tokens in `.env`. OpenClaw supports `SecretRef`:
+
 - **Environment**: `${MY_SECRET_VAR}`
 - **Files**: `{"source": "file", "provider": "default", "id": "/run/secrets/my_secret"}`
 
 ## Persistence
+
 Marie's core identity (`MEMORY.md`, `USER.md`) is stored in the volume mounted to `/home/node/.openclaw`. Ensure this directory is backed up regularly.

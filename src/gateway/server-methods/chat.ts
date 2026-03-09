@@ -58,8 +58,8 @@ import { injectTimestamp, timestampOptsFromConfig } from "./agent-timestamp.js";
 import { setGatewayDedupeEntry } from "./agent-wait-dedupe.js";
 import { normalizeRpcAttachmentsToChatAttachments } from "./attachment-normalize.js";
 import { appendInjectedAssistantMessageToTranscript } from "./chat-transcript-inject.js";
-import { assertValidParams } from "./validation.js";
 import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
+import { assertValidParams } from "./validation.js";
 
 type TranscriptAppendResult = {
   ok: boolean;

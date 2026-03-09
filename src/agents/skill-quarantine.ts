@@ -33,11 +33,12 @@ export class SkillQuarantine {
 
     // 1. Static Analysis (leverages existing skill-scanner.ts)
     const scanSummary = await scanDirectoryWithSummary(skillPath);
-    
+
     if (scanSummary.critical > 0) {
-      findings.push(...scanSummary.findings
-        .filter(f => f.severity === "critical")
-        .map(f => `${f.ruleId}: ${f.message} (${path.basename(f.file)}:${f.line})`)
+      findings.push(
+        ...scanSummary.findings
+          .filter((f) => f.severity === "critical")
+          .map((f) => `${f.ruleId}: ${f.message} (${path.basename(f.file)}:${f.line})`),
       );
     }
 
@@ -71,20 +72,17 @@ export class SkillQuarantine {
     const expected = this.signSkill(skillPath);
     const signatureBuffer = Buffer.from(signature);
     const expectedBuffer = Buffer.from(expected);
-    
+
     if (signatureBuffer.length !== expectedBuffer.length) {
       return false;
     }
-    
+
     return crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
   }
 
   private signSkill(skillPath: string): string {
     // We sign the normalized skill path to prevent bypass via symbolic links or relative paths
     const normalizedPath = path.resolve(skillPath);
-    return crypto
-      .createHmac("sha256", this.secretKey)
-      .update(normalizedPath)
-      .digest("hex");
+    return crypto.createHmac("sha256", this.secretKey).update(normalizedPath).digest("hex");
   }
 }

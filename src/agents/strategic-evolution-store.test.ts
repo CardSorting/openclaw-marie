@@ -1,67 +1,70 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getStrategicEvolutionStore, resetStrategicEvolutionStoreForTest } from "./strategic-evolution-store.js";
-import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import {
+  getStrategicEvolutionStore,
+  resetStrategicEvolutionStoreForTest,
+} from "./strategic-evolution-store.js";
 
 describe("StrategicEvolutionStore", () => {
-    let testDbPath: string;
-    let store: Awaited<ReturnType<typeof getStrategicEvolutionStore>>;
+  let testDbPath: string;
+  let store: Awaited<ReturnType<typeof getStrategicEvolutionStore>>;
 
-    beforeEach(async () => {
-        resetStrategicEvolutionStoreForTest();
-        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-test-"));
-        testDbPath = path.join(tmpDir, "test-strategic.sqlite");
-        store = await getStrategicEvolutionStore(testDbPath);
+  beforeEach(async () => {
+    resetStrategicEvolutionStoreForTest();
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-test-"));
+    testDbPath = path.join(tmpDir, "test-strategic.sqlite");
+    store = await getStrategicEvolutionStore(testDbPath);
+  });
+
+  afterEach(() => {
+    resetStrategicEvolutionStoreForTest();
+    if (fs.existsSync(testDbPath)) {
+      // Optional: cleanup
+    }
+  });
+
+  it("should record and retrieve metrics", async () => {
+    const sessionKey = "test-session";
+    await store.recordMetric({
+      sessionKey,
+      type: "sentiment",
+      value: 0.8,
+      metadata: { info: "test" },
     });
 
-    afterEach(() => {
-        resetStrategicEvolutionStoreForTest();
-        if (fs.existsSync(testDbPath)) {
-            // Optional: cleanup
-        }
-    });
+    const metrics = store.getRecentMetrics({ sessionKey, type: "sentiment" });
+    expect(metrics.length).toBe(1);
+    expect(metrics[0].value).toBe(0.8);
+    expect(JSON.parse(metrics[0].metadata!)).toEqual({ info: "test" });
+  });
 
-    it("should record and retrieve metrics", async () => {
-        const sessionKey = "test-session";
-        await store.recordMetric({
-            sessionKey,
-            type: "sentiment",
-            value: 0.8,
-            metadata: { info: "test" }
-        });
+  it("should track recall hits", async () => {
+    const sessionKey = "test-session";
+    const lineHash = "abc123hash";
 
-        const metrics = store.getRecentMetrics({ sessionKey, type: "sentiment" });
-        expect(metrics.length).toBe(1);
-        expect(metrics[0].value).toBe(0.8);
-        expect(JSON.parse(metrics[0].metadata!)).toEqual({ info: "test" });
-    });
+    await store.recordRecallHit(sessionKey, lineHash);
+    await store.recordRecallHit(sessionKey, lineHash);
 
-    it("should track recall hits", async () => {
-        const sessionKey = "test-session";
-        const lineHash = "abc123hash";
+    const hits = store.getRecallHits(sessionKey, lineHash);
+    expect(hits).toBe(2);
+  });
 
-        await store.recordRecallHit(sessionKey, lineHash);
-        await store.recordRecallHit(sessionKey, lineHash);
+  it("should calculate stats", async () => {
+    const sessionKey = "stats-session";
 
-        const hits = store.getRecallHits(sessionKey, lineHash);
-        expect(hits).toBe(2);
-    });
+    await store.recordMetric({ sessionKey, type: "discovery", value: 10 });
+    await store.recordMetric({ sessionKey, type: "discovery", value: 20 });
+    await store.recordMetric({ sessionKey, type: "discovery", value: 30 });
 
-    it("should calculate stats", async () => {
-        const sessionKey = "stats-session";
-        
-        await store.recordMetric({ sessionKey, type: "discovery", value: 10 });
-        await store.recordMetric({ sessionKey, type: "discovery", value: 20 });
-        await store.recordMetric({ sessionKey, type: "discovery", value: 30 });
+    const stats = store.getStats({ sessionKey, type: "discovery" });
+    expect(stats.count).toBe(3);
+    expect(stats.mean).toBe(20);
+    expect(stats.stdDev).toBeGreaterThan(0);
+  });
 
-        const stats = store.getStats({ sessionKey, type: "discovery" });
-        expect(stats.count).toBe(3);
-        expect(stats.mean).toBe(20);
-        expect(stats.stdDev).toBeGreaterThan(0);
-    });
-
-    it("should persist and retrieve session state", async () => {
+  it("should persist and retrieve session state", async () => {
     const sessionKey = "test-session";
     const stateKey = "turn_count";
     const stateValue = 42;

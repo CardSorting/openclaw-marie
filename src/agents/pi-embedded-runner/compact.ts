@@ -32,6 +32,7 @@ import { listChannelSupportedActions, resolveChannelMessageToolHints } from "../
 import { formatUserTime, resolveUserTimeFormat, resolveUserTimezone } from "../date-time.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
 import { resolveOpenClawDocsPath } from "../docs-path.js";
+import { flushMemory } from "../marie-memory-flush.js";
 import { getApiKeyForModel, resolveModelAuthMode } from "../model-auth.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
 import { resolveOwnerDisplaySetting } from "../owner-display.js";
@@ -75,7 +76,6 @@ import { buildModelAliasLines, resolveModel } from "./model.js";
 import { buildEmbeddedSandboxInfo } from "./sandbox-info.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "./session-manager-cache.js";
 import { resolveEmbeddedRunSkillEntries } from "./skills-runtime.js";
-import { flushMemory } from "../marie-memory-flush.js";
 import {
   applySystemPromptOverrideToSession,
   buildEmbeddedSystemPrompt,
@@ -278,7 +278,7 @@ export async function compactEmbeddedPiSessionDirect(
     };
   };
   const agentDir = params.agentDir ?? resolveOpenClawAgentDir();
-  
+
   // Marie Production Hardening: Perform semantic hygiene and recall-based ablation before compaction
   await flushMemory(agentDir, params.sessionKey).catch((err) => {
     log.warn(`[compaction] Marie memory flush failed (non-fatal): ${String(err)}`);

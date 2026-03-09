@@ -73,7 +73,7 @@ const LAYER_MAP: Record<string, JoyZoningLayer> = {
 export function getLayer(filePath: string): JoyZoningLayer {
   // Use relative path from CWD to ensure consistency regardless of absolute path prefix
   const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, "/");
-  const normalizedPath = relativePath.startsWith("src/") ? relativePath : `src/${relativePath}`;
+  const normalizedPath = relativePath.startsWith("src/") ? relativePath : relativePath;
 
   // Specific file match first
   if (LAYER_MAP[normalizedPath]) {
@@ -368,12 +368,9 @@ export function suggestLayerForContent(
  * Extracts target file paths from various common tool parameter names.
  * Returns an object with the primary filePath and an optional transitionPath (for renames/moves).
  */
-export function getTargetPaths(params: Record<string, unknown> | null | undefined): {
-  filePath: string | null;
-  newPath: string | null;
-} {
+export function getTargetPath(params: Record<string, unknown> | null | undefined): string | null {
   if (!params) {
-    return { filePath: null, newPath: null };
+    return null;
   }
 
   const filePath =
@@ -385,13 +382,26 @@ export function getTargetPaths(params: Record<string, unknown> | null | undefine
     (params.sourcePath as string) ??
     (params.oldPath as string);
 
+  return typeof filePath === "string" ? filePath : null;
+}
+
+export function getTargetPaths(params: Record<string, unknown> | null | undefined): {
+  filePath: string | null;
+  newPath: string | null;
+} {
+  if (!params) {
+    return { filePath: null, newPath: null };
+  }
+
+  const filePath = getTargetPath(params);
+
   const newPath =
     (params.newPath as string) ??
     (params.destinationPath as string) ??
     (params.targetPath as string);
 
   return {
-    filePath: typeof filePath === "string" ? filePath : null,
+    filePath,
     newPath: typeof newPath === "string" ? newPath : null,
   };
 }
@@ -461,6 +471,8 @@ export function getCorrectionHint(errors: string[]): string {
       );
     } else if (err.includes("any")) {
       fixes.push("Replace 'any' with a typed interface or generic.");
+    } else if (err.includes("Architectural Violation")) {
+      fixes.push("Move the import to a lower layer or use dependency inversion via interfaces.");
     }
   }
   if (fixes.length === 0) {

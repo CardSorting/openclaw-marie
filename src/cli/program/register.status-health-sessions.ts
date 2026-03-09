@@ -59,10 +59,7 @@ export function registerStatusHealthSessionsCommands(program: Command) {
           ["marie status --all", "Full diagnosis (read-only)."],
           ["marie status --json", "Machine-readable output."],
           ["marie status --usage", "Show model provider usage/quota snapshots."],
-          [
-            "marie status --deep",
-            "Run channel probes (WA + Telegram + Discord + Slack + Signal).",
-          ],
+          ["marie status --deep", "Run channel probes (WA + Telegram + Discord + Slack + Signal)."],
           ["marie status --deep --timeout 5000", "Tighten probe timeout."],
         ])}`,
     )
@@ -182,10 +179,7 @@ export function registerStatusHealthSessionsCommands(program: Command) {
           ["marie sessions cleanup --enforce", "Apply maintenance now."],
           ["marie sessions cleanup --agent work --dry-run", "Preview one agent store."],
           ["marie sessions cleanup --all-agents --dry-run", "Preview all agent stores."],
-          [
-            "marie sessions cleanup --enforce --store ./tmp/sessions.json",
-            "Use a specific store.",
-          ],
+          ["marie sessions cleanup --enforce --store ./tmp/sessions.json", "Use a specific store."],
         ])}`,
     )
     .action(async (opts, command) => {

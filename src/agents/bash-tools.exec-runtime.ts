@@ -272,8 +272,8 @@ export function emitExecSystemEvent(
 }
 
 import { validateCommand } from "../security/command-blocklist.js";
-import { authorizeToolExecution, tarpitNetworkTool } from "../security/zero-trust.js";
 import { isQuarantineRequired, redirectCommandPaths } from "../security/quarantine-shadow.js";
+import { authorizeToolExecution, tarpitNetworkTool } from "../security/zero-trust.js";
 
 export async function runExecProcess(opts: {
   command: string;
@@ -413,10 +413,10 @@ export async function runExecProcess(opts: {
     let containerWorkdir = opts.containerWorkdir ?? opts.sandbox?.containerWorkdir;
 
     if (quarantine && opts.sandbox) {
-        logWarn(`QUARANTINE ACTIVE: Isolating command in detention container for ${opts.sessionKey}`);
-        // We use a dedicated 'quarantine-marie' container if it exists, 
-        // or just force a different, isolated workdir.
-        containerWorkdir = `/tmp/quarantine/${opts.sessionKey}`;
+      logWarn(`QUARANTINE ACTIVE: Isolating command in detention container for ${opts.sessionKey}`);
+      // We use a dedicated 'quarantine-marie' container if it exists,
+      // or just force a different, isolated workdir.
+      containerWorkdir = `/tmp/quarantine/${opts.sessionKey}`;
     }
 
     if (opts.sandbox) {
@@ -436,13 +436,13 @@ export async function runExecProcess(opts: {
         stdinMode: opts.usePty ? ("pipe-open" as const) : ("pipe-closed" as const),
       };
     }
-    
+
     // For host execution, we wrap in 'unshare' or similar if available/requested
     let finalExecCommand = execCommand;
     if (quarantine && !opts.sandbox) {
-        // Simple host-level quarantine: wrap in restrictive namespace if possible
-        // (This is highly OS dependent, so we'll just log and use a restricted temp dir)
-        logWarn(`QUARANTINE ACTIVE: Redirecting host command to isolation dir.`);
+      // Simple host-level quarantine: wrap in restrictive namespace if possible
+      // (This is highly OS dependent, so we'll just log and use a restricted temp dir)
+      logWarn(`QUARANTINE ACTIVE: Redirecting host command to isolation dir.`);
     }
 
     const { shell, args: shellArgs } = getShellConfig();

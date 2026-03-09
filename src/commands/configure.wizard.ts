@@ -1,17 +1,20 @@
 import fsPromises from "node:fs/promises";
 import nodePath from "node:path";
+import path from "node:path";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { readConfigFileSnapshot, resolveGatewayPort, writeConfigFile } from "../config/config.js";
 import { logConfigUpdated } from "../config/logging.js";
 import { ensureControlUiAssetsBuilt } from "../infra/control-ui-assets.js";
+import { deleteSharedEnvVar, readSharedEnv, upsertSharedEnvVar } from "../infra/env-file.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
 import { note } from "../terminal/note.js";
 import { resolveUserPath } from "../utils.js";
+import { resolveConfigDir } from "../utils.js";
 import { createClackPrompter } from "../wizard/clack-prompter.js";
 import { resolveOnboardingSecretInputString } from "../wizard/onboarding.secret-input.js";
-import { WizardCancelledError } from "../wizard/prompts.js";
+import { WizardCancelledError, type WizardPrompter } from "../wizard/prompts.js";
 import { removeChannelConfigWizard } from "./configure.channels.js";
 import { maybeInstallDaemon } from "./configure.daemon.js";
 import { promptAuthConfig } from "./configure.gateway-auth.js";
@@ -43,6 +46,7 @@ import {
   summarizeExistingConfig,
   waitForGatewayReachable,
 } from "./onboard-helpers.js";
+import { promptAssistantIdentity } from "./onboard-identity.js";
 import { promptRemoteGatewayConfig } from "./onboard-remote.js";
 import { setupSkills } from "./onboard-skills.js";
 
@@ -541,6 +545,14 @@ export async function runConfigureWizard(
         nextConfig = await setupSkills(nextConfig, wsDir, runtime, prompter);
       }
 
+      if (selected.includes("identity")) {
+        nextConfig = await promptAssistantIdentity(nextConfig, prompter);
+      }
+
+      if (selected.includes("env")) {
+        await promptEnvManager(runtime, prompter);
+      }
+
       await persistConfig();
 
       if (selected.includes("daemon")) {
@@ -597,6 +609,15 @@ export async function runConfigureWizard(
           const wsDir = resolveUserPath(workspaceDir);
           nextConfig = await setupSkills(nextConfig, wsDir, runtime, prompter);
           await persistConfig();
+        }
+
+        if (choice === "identity") {
+          nextConfig = await promptAssistantIdentity(nextConfig, prompter);
+          await persistConfig();
+        }
+
+        if (choice === "env") {
+          await promptEnvManager(runtime, prompter);
         }
 
         if (choice === "daemon") {
@@ -697,5 +718,85 @@ export async function runConfigureWizard(
       return;
     }
     throw err;
+  }
+}
+
+async function promptEnvManager(_runtime: RuntimeEnv, prompter: WizardPrompter) {
+  const envFile = path.join(resolveConfigDir(process.env), ".env");
+  await prompter.intro(`Environment Manager (${envFile})`);
+
+  while (true) {
+    const env = readSharedEnv(process.env);
+    const keys = Object.keys(env);
+
+    const action = await prompter.select({
+      message: "Manage environment variables",
+      options: [
+        { value: "add", label: "Add/Update variable", hint: "Create or change a value" },
+        ...(keys.length > 0
+          ? [{ value: "delete", label: "Delete variable", hint: "Remove an entry" }]
+          : []),
+        { value: "list", label: "List variables", hint: "View all current entries" },
+        { value: "back", label: "Go back" },
+      ],
+      initialValue: "add",
+    });
+
+    if (action === "back") {
+      break;
+    }
+
+    if (action === "list") {
+      if (keys.length === 0) {
+        await prompter.note("No variables found in .env file.", "Environment");
+      } else {
+        const list = keys.map(
+          (k) => `${k}=${k.includes("KEY") || k.includes("TOKEN") ? "********" : env[k]}`,
+        );
+        await prompter.note(list.join("\n"), "Current variables");
+      }
+      continue;
+    }
+
+    if (action === "add") {
+      const key = await prompter.text({
+        message: "Variable name (e.g. OPENAI_API_KEY)",
+        placeholder: "NAME",
+      });
+      if (!key) {
+        continue;
+      }
+
+      const value = await prompter.text({
+        message: `Value for ${key}`,
+        placeholder: "value",
+      });
+      if (!value) {
+        continue;
+      }
+
+      upsertSharedEnvVar({ key, value });
+      await prompter.note(`Updated ${key} in ${envFile}`, "Success");
+    }
+
+    if (action === "delete") {
+      const key = await prompter.select({
+        message: "Select variable to delete",
+        options: keys.map((k) => ({ value: k, label: k })),
+      });
+      if (!key) {
+        continue;
+      }
+
+      const confirmed = await prompter.confirm({
+        message: `Are you sure you want to delete ${key}?`,
+        initialValue: false,
+      });
+
+      if (confirmed) {
+        deleteSharedEnvVar(key);
+        await prompter.note(`Deleted ${key} from ${envFile}`, "Success");
+      }
+    }
   }
 }

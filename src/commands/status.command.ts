@@ -407,7 +407,8 @@ export async function statusCommand(
     if (jz.totalViolations === 0) {
       return ok("perfect");
     }
-    const colorByTone = (val: number, isWarn: boolean) => (val > 0 ? (isWarn ? warn(String(val)) : theme.error(String(val))) : muted("0"));
+    const colorByTone = (val: number, isWarn: boolean) =>
+      val > 0 ? (isWarn ? warn(String(val)) : theme.error(String(val))) : muted("0");
     const warnings = colorByTone(jz.totalWarnings, true);
     const blocks = colorByTone(jz.totalBlocks, false);
     return `${jz.totalViolations} violations · ${warnings} warn · ${blocks} block · ${jz.filesWithStrikes} struck files`;

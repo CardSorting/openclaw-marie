@@ -13,6 +13,8 @@ export const CONFIGURE_WIZARD_SECTIONS = [
   "web",
   "gateway",
   "daemon",
+  "env",
+  "identity",
   "channels",
   "skills",
   "health",
@@ -58,6 +60,16 @@ export const CONFIGURE_SECTION_OPTIONS: Array<{
     value: "daemon",
     label: "Daemon",
     hint: "Install/manage the background service",
+  },
+  {
+    value: "env",
+    label: "Environment variables",
+    hint: "Manage .env file for API keys",
+  },
+  {
+    value: "identity",
+    label: "Identity",
+    hint: "Set assistant name and avatar",
   },
   {
     value: "channels",

@@ -21,10 +21,7 @@ const ROOT_COMMANDS_HINT =
 
 const EXAMPLES = [
   ["marie models --help", "Show detailed help for the models command."],
-  [
-    "marie channels login --verbose",
-    "Link personal WhatsApp Web and show QR + connection logs.",
-  ],
+  ["marie channels login --verbose", "Link personal WhatsApp Web and show QR + connection logs."],
   [
     'marie message send --target +15555550123 --message "Hi" --json',
     "Send via your web session and print JSON result.",

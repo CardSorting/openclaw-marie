@@ -5,6 +5,7 @@ import {
 import type { OpenClawConfig } from "../../../config/config.js";
 import type { DmPolicy, GroupPolicy } from "../../../config/types.js";
 import type { SecretInput } from "../../../config/types.secrets.js";
+import { upsertSharedEnvVar } from "../../../infra/env-file.js";
 import { promptAccountId as promptAccountIdSdk } from "../../../plugin-sdk/onboarding.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../../../routing/session-key.js";
 import type { WizardPrompter } from "../../../wizard/prompts.js";
@@ -469,6 +470,19 @@ export async function promptSingleChannelSecretInput(params: {
       return { action: "use-env" };
     }
     if (plainResult.token) {
+      if (params.preferredEnvVar) {
+        const saveToEnv = await params.prompter.confirm({
+          message: `Save this ${params.credentialLabel} to your .env file? (Enables auto-detection next time)`,
+          initialValue: true,
+        });
+        if (saveToEnv) {
+          upsertSharedEnvVar({ key: params.preferredEnvVar, value: plainResult.token });
+          await params.prompter.note(
+            `Saved ${params.preferredEnvVar} to local .env file.`,
+            "Environment",
+          );
+        }
+      }
       return { action: "set", value: plainResult.token, resolvedValue: plainResult.token };
     }
     return { action: "keep" };

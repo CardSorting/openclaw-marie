@@ -1,6 +1,6 @@
 import path from "node:path";
 
-export const DEFAULT_CLI_NAME = "marie";
+export const DEFAULT_CLI_NAME = "openclaw";
 const KNOWN_CLI_NAMES = new Set([DEFAULT_CLI_NAME, "openclaw"]);
 const CLI_PREFIX_RE = /^(?:((?:pnpm|npm|bunx|npx)\s+))?(marie|openclaw)\b/;
 

@@ -41,7 +41,7 @@ services:
         limits:
           memory: 2048M
     healthcheck:
-      test: [ "CMD", "node", "scripts/healthcheck.js" ]
+      test: ["CMD", "node", "scripts/healthcheck.js"]
       interval: 1m30s
       timeout: 10s
       retries: 3

@@ -7,6 +7,7 @@ import {
   TAILSCALE_EXPOSURE_OPTIONS,
   TAILSCALE_MISSING_BIN_NOTE_LINES,
 } from "../gateway/gateway-config-prompts.shared.js";
+import { upsertSharedEnvVar } from "../infra/env-file.js";
 import { findTailscaleBinary } from "../infra/tailscale.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { resolveDefaultSecretProviderAlias } from "../secrets/ref-contract.js";
@@ -227,6 +228,15 @@ export async function promptGatewayConfig(
       );
       gatewayTokenForCalls = normalizeGatewayTokenInput(tokenInput) || randomToken();
       gatewayToken = gatewayTokenForCalls;
+
+      const saveToEnv = await confirm({
+        message: "Save gateway token to .env file? (Enables automatic login next time)",
+        initialValue: true,
+      });
+      if (saveToEnv) {
+        upsertSharedEnvVar({ key: "OPENCLAW_GATEWAY_TOKEN", value: gatewayTokenForCalls });
+        note("Saved OPENCLAW_GATEWAY_TOKEN to local .env file.", "Environment");
+      }
     }
   }
 
@@ -239,6 +249,15 @@ export async function promptGatewayConfig(
       runtime,
     );
     gatewayPassword = String(password ?? "").trim();
+
+    const saveToEnv = await confirm({
+      message: "Save gateway password to .env file?",
+      initialValue: true,
+    });
+    if (saveToEnv) {
+      upsertSharedEnvVar({ key: "OPENCLAW_GATEWAY_PASSWORD", value: gatewayPassword });
+      note("Saved OPENCLAW_GATEWAY_PASSWORD to local .env file.", "Environment");
+    }
   }
 
   if (authMode === "trusted-proxy") {

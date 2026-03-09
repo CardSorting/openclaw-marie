@@ -15,10 +15,7 @@ export interface ValidationResult {
  * Treats tool outputs as untrusted until validated. Runs injection pattern
  * matching on tool results. Results matching patterns are quarantined.
  */
-export function validateToolResult(
-  result: unknown,
-  toolName: string,
-): ValidationResult {
+export function validateToolResult(result: unknown, toolName: string): ValidationResult {
   const content = typeof result === "string" ? result : JSON.stringify(result);
 
   // Run injection scanner on tool output

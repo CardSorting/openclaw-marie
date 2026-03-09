@@ -21,6 +21,7 @@ export type SetupChannelsOptions = {
   quickstartDefaults?: boolean;
   initialSelection?: ChannelId[];
   secretInputMode?: "plaintext" | "ref";
+  flow?: "quickstart" | "advanced" | "manual";
 };
 
 export type PromptAccountIdParams = {

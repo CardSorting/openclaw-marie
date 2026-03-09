@@ -14,7 +14,7 @@ import {
   resolveWhatsAppAuthDir,
 } from "../../../web/accounts.js";
 import type { WizardPrompter } from "../../../wizard/prompts.js";
-import type { ChannelOnboardingAdapter } from "../onboarding-types.js";
+import type { ChannelOnboardingAdapter, SetupChannelsOptions } from "../onboarding-types.js";
 import {
   normalizeAllowFromEntries,
   resolveAccountIdForConfigure,
@@ -121,12 +121,13 @@ function parseWhatsAppAllowFromEntries(raw: string): { entries: string[]; invali
   return { entries: normalizeAllowFromEntries(entries, normalizeE164) };
 }
 
-async function promptWhatsAppAllowFrom(
-  cfg: OpenClawConfig,
-  _runtime: RuntimeEnv,
-  prompter: WizardPrompter,
-  options?: { forceAllowlist?: boolean },
-): Promise<OpenClawConfig> {
+async function promptWhatsAppAllowFrom(params: {
+  cfg: OpenClawConfig;
+  runtime: RuntimeEnv;
+  prompter: WizardPrompter;
+  options?: SetupChannelsOptions & { forceAllowlist?: boolean };
+}): Promise<OpenClawConfig> {
+  const { cfg, prompter, options } = params;
   const existingPolicy = cfg.channels?.whatsapp?.dmPolicy ?? "pairing";
   const existingAllowFrom = cfg.channels?.whatsapp?.allowFrom ?? [];
   const existingLabel = existingAllowFrom.length > 0 ? existingAllowFrom.join(", ") : "unset";
@@ -155,25 +156,34 @@ async function promptWhatsAppAllowFrom(
     "WhatsApp DM access",
   );
 
-  const phoneMode = await prompter.select({
-    message: "WhatsApp phone setup",
-    options: [
-      { value: "personal", label: "This is my personal phone number" },
-      { value: "separate", label: "Separate phone just for OpenClaw" },
-    ],
-  });
+  const phoneMode =
+    options?.forceAllowlist || (options?.flow === "quickstart" && !cfg.channels?.whatsapp)
+      ? "personal"
+      : await prompter.select({
+          message: "WhatsApp phone setup",
+          options: [
+            { value: "personal", label: "This is my personal phone number" },
+            { value: "separate", label: "Separate phone just for OpenClaw" },
+          ],
+        });
 
   if (phoneMode === "personal") {
-    return await applyWhatsAppOwnerAllowlist({
-      cfg,
+    const { normalized, allowFrom } = await promptWhatsAppOwnerAllowFrom({
       prompter,
       existingAllowFrom,
-      title: "WhatsApp personal phone",
-      messageLines: [
+    });
+    let next = setWhatsAppSelfChatMode(cfg, true);
+    next = setWhatsAppDmPolicy(next, "allowlist");
+    next = setWhatsAppAllowFrom(next, allowFrom);
+    await prompter.note(
+      [
         "Personal phone mode enabled.",
         "- dmPolicy set to allowlist (pairing skipped)",
-      ],
-    });
+        `- allowFrom includes ${normalized}`,
+      ].join("\n"),
+      "WhatsApp personal phone",
+    );
+    return next;
   }
 
   const policy = (await prompter.select({
@@ -342,8 +352,14 @@ export const whatsappOnboardingAdapter: ChannelOnboardingAdapter = {
       );
     }
 
-    next = await promptWhatsAppAllowFrom(next, runtime, prompter, {
-      forceAllowlist: forceAllowFrom,
+    next = await promptWhatsAppAllowFrom({
+      cfg: next,
+      runtime,
+      prompter,
+      options: {
+        ...options,
+        forceAllowlist: forceAllowFrom,
+      },
     });
 
     return { cfg: next, accountId };

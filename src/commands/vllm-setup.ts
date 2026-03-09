@@ -1,5 +1,6 @@
 import { upsertAuthProfileWithLock } from "../agents/auth-profiles.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { upsertSharedEnvVar } from "../infra/env-file.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
 
 export const VLLM_DEFAULT_BASE_URL = "http://127.0.0.1:8000/v1";
@@ -40,6 +41,15 @@ export async function promptAndConfigureVllm(params: {
   const apiKey = String(apiKeyRaw ?? "").trim();
   const modelId = String(modelIdRaw ?? "").trim();
   const modelRef = `vllm/${modelId}`;
+
+  const saveToEnv = await params.prompter.confirm({
+    message: "Save vLLM API key to .env file? (Enables auto-detection next time)",
+    initialValue: true,
+  });
+  if (saveToEnv) {
+    upsertSharedEnvVar({ key: "VLLM_API_KEY", value: apiKey });
+    await params.prompter.note("Saved VLLM_API_KEY to local .env file.", "Environment");
+  }
 
   await upsertAuthProfileWithLock({
     profileId: "vllm:default",

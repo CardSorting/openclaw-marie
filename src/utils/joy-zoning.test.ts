@@ -164,10 +164,7 @@ describe("JoyZoning Utility", () => {
 
   describe("detectCrossLayerImports", () => {
     it("detects Domain importing Infrastructure", () => {
-      const violations = detectCrossLayerImports(
-        'import { db } from "../infra/db.js"',
-        "Domain",
-      );
+      const violations = detectCrossLayerImports('import { db } from "../infra/db.js"', "Domain");
       expect(violations).toHaveLength(1);
       expect(violations[0]).toContain("Infrastructure");
     });
@@ -206,9 +203,9 @@ describe("JoyZoning Utility", () => {
     });
 
     it("allows Core importing Infrastructure", () => {
-      expect(
-        detectCrossLayerImports('import { db } from "../infra/db.js"', "Core"),
-      ).toHaveLength(0);
+      expect(detectCrossLayerImports('import { db } from "../infra/db.js"', "Core")).toHaveLength(
+        0,
+      );
     });
   });
 
@@ -225,7 +222,7 @@ describe("JoyZoning Utility", () => {
     it("passes clean Domain code", () => {
       const result = validateJoyZoning(
         "src/config/models.ts",
-        'export interface Config { name: string; }',
+        "export interface Config { name: string; }",
       );
       expect(result.success).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -246,7 +243,9 @@ describe("JoyZoning Utility", () => {
     });
 
     it("suggests Plumbing for stateless exports", () => {
-      const result = suggestLayerForContent("export function formatDate(d: Date) { return d.toISOString(); }");
+      const result = suggestLayerForContent(
+        "export function formatDate(d: Date) { return d.toISOString(); }",
+      );
       expect(result).not.toBeNull();
       expect(result!.layer).toBe("Plumbing");
     });

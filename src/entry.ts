@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { enableCompileCache } from "node:module";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { initEvolutionaryPilot } from "./agents/evolutionary-pilot.js";
 import { isRootHelpInvocation, isRootVersionInvocation } from "./cli/argv.js";
 import { applyCliProfileEnv, parseCliProfileArgs } from "./cli/profile.js";
 import { shouldSkipRespawnForArgv } from "./cli/respawn-policy.js";
@@ -11,7 +12,6 @@ import { isTruthyEnvValue, normalizeEnv } from "./infra/env.js";
 import { isMainModule } from "./infra/is-main.js";
 import { installProcessWarningFilter } from "./infra/warning-filter.js";
 import { attachChildProcessBridge } from "./process/child-process-bridge.js";
-import { initEvolutionaryPilot } from "./agents/evolutionary-pilot.js";
 
 const ENTRY_WRAPPER_PAIRS = [
   { wrapperBasename: "openclaw.mjs", entryBasename: "entry.js" },

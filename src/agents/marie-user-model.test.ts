@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { MarieUserModel } from "./marie-user-model.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeUserModel } from "./marie-memory.js";
+import { MarieUserModel } from "./marie-user-model.js";
 
 let tmpDir: string;
 let userModel: MarieUserModel;
@@ -20,8 +20,11 @@ afterEach(async () => {
 describe("marie-user-model", () => {
   it("builds a dialectic prompt with current model", async () => {
     await writeUserModel(tmpDir, "Existing user model content.");
-    const prompt = await userModel.buildDialecticPrompt(["User prefers TypeScript.", "User uses dark mode."]);
-    
+    const prompt = await userModel.buildDialecticPrompt([
+      "User prefers TypeScript.",
+      "User uses dark mode.",
+    ]);
+
     expect(prompt).toContain("User Model Refinement");
     expect(prompt).toContain("Existing user model content.");
     expect(prompt).toContain("User prefers TypeScript.");

@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { createHash } from "node:crypto";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 
 const log = createSubsystemLogger("agents/skill-patch");
@@ -61,8 +61,11 @@ export class SkillPatchManager {
 
     try {
       const content = await fs.readFile(historyPath, "utf8");
-      const entries = content.trim().split("\n").map(line => JSON.parse(line) as PatchHistoryEntry);
-      const target = entries.find(e => e.version === version);
+      const entries = content
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as PatchHistoryEntry);
+      const target = entries.find((e) => e.version === version);
 
       if (!target) {
         log.error(`Version ${version} not found in history for skill ${skillId}`);

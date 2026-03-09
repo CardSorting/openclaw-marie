@@ -699,7 +699,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
     }
 
     const archived = archiveFileOnDisk(filePath, "bak");
-    
+
     // Preserve the session header (first line) if it's a valid JSON header.
     // This ensures sessionId, version, and cwd metadata are not lost during truncation.
     const firstLine = lines[0];

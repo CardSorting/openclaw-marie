@@ -197,27 +197,10 @@ export const telegramOnboardingAdapter: ChannelOnboardingAdapter = {
     const canUseEnv =
       allowEnv && !hasConfigToken && Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim());
 
-    if (!accountConfigured) {
-      await noteTelegramTokenHelp(prompter);
-    }
-
-    const tokenResult = await promptSingleChannelSecretInput({
-      cfg: next,
-      prompter,
-      providerHint: "telegram",
-      credentialLabel: "Telegram bot token",
-      secretInputMode: options?.secretInputMode,
-      accountConfigured,
-      canUseEnv,
-      hasConfigToken,
-      envPrompt: "TELEGRAM_BOT_TOKEN detected. Use env var?",
-      keepPrompt: "Telegram token already configured. Keep it?",
-      inputPrompt: "Enter Telegram bot token",
-      preferredEnvVar: allowEnv ? "TELEGRAM_BOT_TOKEN" : undefined,
-    });
-
     let resolvedTokenForAllowFrom: string | undefined;
-    if (tokenResult.action === "use-env") {
+    const autoToken = canUseEnv ? process.env.TELEGRAM_BOT_TOKEN?.trim() : undefined;
+    if (autoToken && !accountConfigured && options?.flow !== "advanced") {
+      await prompter.note(`Using TELEGRAM_BOT_TOKEN from environment.`, "Telegram");
       next = applySingleTokenPromptResult({
         cfg: next,
         channel: "telegram",
@@ -225,16 +208,46 @@ export const telegramOnboardingAdapter: ChannelOnboardingAdapter = {
         tokenPatchKey: "botToken",
         tokenResult: { useEnv: true, token: null },
       });
-      resolvedTokenForAllowFrom = process.env.TELEGRAM_BOT_TOKEN?.trim() || undefined;
-    } else if (tokenResult.action === "set") {
-      next = applySingleTokenPromptResult({
+      resolvedTokenForAllowFrom = autoToken;
+    } else {
+      if (!accountConfigured) {
+        await noteTelegramTokenHelp(prompter);
+      }
+
+      const tokenResult = await promptSingleChannelSecretInput({
         cfg: next,
-        channel: "telegram",
-        accountId: telegramAccountId,
-        tokenPatchKey: "botToken",
-        tokenResult: { useEnv: false, token: tokenResult.value },
+        prompter,
+        providerHint: "telegram",
+        credentialLabel: "Telegram bot token",
+        secretInputMode: options?.secretInputMode,
+        accountConfigured,
+        canUseEnv,
+        hasConfigToken,
+        envPrompt: "TELEGRAM_BOT_TOKEN detected. Use env var?",
+        keepPrompt: "Telegram token already configured. Keep it?",
+        inputPrompt: "Enter Telegram bot token",
+        preferredEnvVar: allowEnv ? "TELEGRAM_BOT_TOKEN" : undefined,
       });
-      resolvedTokenForAllowFrom = tokenResult.resolvedValue;
+
+      if (tokenResult.action === "use-env") {
+        next = applySingleTokenPromptResult({
+          cfg: next,
+          channel: "telegram",
+          accountId: telegramAccountId,
+          tokenPatchKey: "botToken",
+          tokenResult: { useEnv: true, token: null },
+        });
+        resolvedTokenForAllowFrom = process.env.TELEGRAM_BOT_TOKEN?.trim() || undefined;
+      } else if (tokenResult.action === "set") {
+        next = applySingleTokenPromptResult({
+          cfg: next,
+          channel: "telegram",
+          accountId: telegramAccountId,
+          tokenPatchKey: "botToken",
+          tokenResult: { useEnv: false, token: tokenResult.value },
+        });
+        resolvedTokenForAllowFrom = tokenResult.resolvedValue;
+      }
     }
 
     if (forceAllowFrom) {

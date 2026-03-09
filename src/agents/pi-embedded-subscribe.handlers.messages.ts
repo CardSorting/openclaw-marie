@@ -2,7 +2,9 @@ import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import { parseReplyDirectives } from "../auto-reply/reply/reply-directives.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
+import { getJoyZoningStore } from "../infra/joy-zoning-store.js";
 import { createInlineCodeState } from "../markdown/code-spans.js";
+import { auditThoughts } from "../security/thought-auditor.js";
 import {
   isMessagingToolDuplicateNormalized,
   normalizeTextForComparison,
@@ -17,8 +19,6 @@ import {
   formatReasoningMessage,
   promoteThinkingTagsToBlocks,
 } from "./pi-embedded-utils.js";
-import { auditThoughts } from "../security/thought-auditor.js";
-import { getJoyZoningStore } from "../infra/joy-zoning-store.js";
 
 const stripTrailingDirective = (text: string): string => {
   const openIndex = text.lastIndexOf("[[");

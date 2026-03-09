@@ -22,6 +22,7 @@ import {
   TAILSCALE_MISSING_BIN_NOTE_LINES,
 } from "../gateway/gateway-config-prompts.shared.js";
 import { DEFAULT_DANGEROUS_NODE_COMMANDS } from "../gateway/node-command-policy.js";
+import { upsertSharedEnvVar } from "../infra/env-file.js";
 import { findTailscaleBinary } from "../infra/tailscale.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { validateIPv4AddressInput } from "../shared/net/ipv4.js";
@@ -219,6 +220,15 @@ export async function configureGatewayForOnboarding(
       });
       gatewayToken = normalizeGatewayTokenInput(tokenInput) || randomToken();
       gatewayTokenInput = gatewayToken;
+
+      const saveToEnv = await prompter.confirm({
+        message: "Save gateway token to .env file? (Enables automatic login next time)",
+        initialValue: true,
+      });
+      if (saveToEnv) {
+        upsertSharedEnvVar({ key: "OPENCLAW_GATEWAY_TOKEN", value: gatewayToken });
+        await prompter.note("Saved OPENCLAW_GATEWAY_TOKEN to local .env file.", "Environment");
+      }
     }
   }
 
@@ -254,6 +264,15 @@ export async function configureGatewayForOnboarding(
             validate: validateGatewayPasswordInput,
           })) ?? "",
         ).trim();
+
+        const saveToEnv = await prompter.confirm({
+          message: "Save gateway password to .env file?",
+          initialValue: true,
+        });
+        if (saveToEnv) {
+          upsertSharedEnvVar({ key: "OPENCLAW_GATEWAY_PASSWORD", value: password });
+          await prompter.note("Saved OPENCLAW_GATEWAY_PASSWORD to local .env file.", "Environment");
+        }
       }
     }
     nextConfig = {

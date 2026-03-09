@@ -13,18 +13,24 @@ Previously, architectural violations caused an immediate "PRE-FLIGHT ARCHITECTUR
 ## 2. Production Hardening Measures
 
 ### Persistent Strike Tracking
+
 Strikes are no longer stored in ephemeral memory. They are persisted in the global state via `StateManager`:
+
 - **Persistence**: Strikes for each file are saved in `architecturalStrikes` within the global state.
 - **Stability**: The policy engine remembers previous violations even after an application restart, ensuring the "Strike 1 block" remains consistent.
 
 ### AST-Based Deep Audits
+
 Fragile regex-based checks for layering and platform leakage have been replaced with deep TypeScript AST analysis:
+
 - **TspPolicyPlugin**: The core transformer now performs comprehensive layering audits at the AST level.
 - **Alias Resolution**: The engine now handles project path aliases (`@/`, `@core/`, `@shared/`, etc.) by resolving them against the `tsconfig.json` structure before validation.
 - **Node.js Restriction**: Expanded the list of restricted Node.js modules for the Domain layer (e.g., `fs`, `path`, `crypto`, `http`, `net`).
 
 ### Stability & Entropy Monitoring
+
 A new monitoring layer was added to `FluidPolicyEngine`:
+
 - **Entropy Detection**: The engine validates that tool outputs match expected hashes (`prevResultHash`).
 - **Divergence Warning**: If output diverges significantly from expectations, an `⚠️ ENTROPY WARNING` is issued to alert the agent to potential structural instability.
 
@@ -37,4 +43,5 @@ A new monitoring layer was added to `FluidPolicyEngine`:
 - **`responses.ts`**: Added specific `architecturalCorrection` response formats for clear agent guidance.
 
 ---
-*Last Updated: 2026-03-06*
+
+_Last Updated: 2026-03-06_

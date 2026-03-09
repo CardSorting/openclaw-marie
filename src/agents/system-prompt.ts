@@ -2,13 +2,13 @@ import { createHmac, createHash } from "node:crypto";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
+import { buildHoneyPotPrompt } from "../security/honey-pots.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
+import { buildAuditSummary as _buildJoyZoningAudit } from "./joy-zoning.policy.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import type { EmbeddedSandboxInfo } from "./pi-embedded-runner/types.js";
 import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
-import { buildAuditSummary as _buildJoyZoningAudit } from "./joy-zoning.policy.js";
-import { buildHoneyPotPrompt } from "../security/honey-pots.js";
 import type { ProvenanceRecord } from "./trust-provenance.js";
 
 function buildJoyZoningAuditSummary(sessionKey?: string): string {
@@ -772,7 +772,9 @@ export function buildRuntimeLine(
   runtimeCapabilities: string[] = [],
   defaultThinkLevel?: ThinkLevel,
 ): string {
-  const lastSnapshot = runtimeInfo?.lastSnapshotTs ? ` | last_snapshot=${runtimeInfo.lastSnapshotTs}` : "";
+  const lastSnapshot = runtimeInfo?.lastSnapshotTs
+    ? ` | last_snapshot=${runtimeInfo.lastSnapshotTs}`
+    : "";
   return `Runtime: ${[
     runtimeInfo?.agentId ? `agent=${runtimeInfo.agentId}` : "",
     runtimeInfo?.host ? `host=${runtimeInfo.host}` : "",

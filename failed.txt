@@ -1,0 +1,1084 @@
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ Failed Tests 42 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/docker-image-digests.test.ts > docker base image pinning > pins selected Dockerfile FROM lines to immutable sha256 digests
+AssertionError: Dockerfile FROM must be digest-pinned: expected 'FROM node:22-bookworm AS builder' to match /^FROM\s+\S+@sha256:[a-f0-9]{64}$/
+
+- Expected: 
+/^FROM\s+\S+@sha256:[a-f0-9]{64}$/
+
++ Received: 
+"FROM node:22-bookworm AS builder"
+
+ ❯ src/docker-image-digests.test.ts:44:72
+     42|         .find((line) => line.trimStart().startsWith("FROM "));
+     43|       expect(fromLine, `${dockerfilePath} should define a FROM line`).toBeDefined();
+     44|       expect(fromLine, `${dockerfilePath} FROM must be digest-pinned`).toMatch(
+       |                                                                        ^
+     45|         /^FROM\s+\S+@sha256:[a-f0-9]{64}$/,
+     46|       );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/42]⎯
+
+ FAIL  src/dockerfile.test.ts > Dockerfile > installs optional browser dependencies after pnpm install
+AssertionError: expected '# --- Build Stage ---\nFROM node:22-b…' to contain 'node /app/node_modules/playwright-cor…'
+
+- Expected
++ Received
+
+- node /app/node_modules/playwright-core/cli.js install --with-deps chromium
++ # --- Build Stage ---
++ FROM node:22-bookworm AS builder
++
++ # Install Bun (required for build scripts)
++ RUN curl -fsSL https://bun.sh/install | bash
++ ENV PATH="/root/.bun/bin:${PATH}"
++
++ RUN corepack enable
++
++ WORKDIR /app
++
++ # Copy dependency files first for better caching
++ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
++ COPY ui/package.json ./ui/package.json
++ COPY patches ./patches
++ COPY scripts/copy-plugin-sdk-root-alias.mjs scripts/write-plugin-sdk-entry-dts.ts scripts/canvas-a2ui-copy.ts scripts/copy-hook-metadata.ts scripts/copy-export-html-templates.ts scripts/write-build-info.ts scripts/write-cli-startup-metadata.ts scripts/write-cli-compat.ts ./scripts/
++
++ # Install dependencies
++ RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
++
++ # Copy source and build
++ COPY . .
++ RUN pnpm build
++ # Force pnpm for UI build (Bun may fail on ARM/Synology architectures)
++ ENV OPENCLAW_PREFER_PNPM=1
++ RUN pnpm ui:build
++
++ # --- Production Stage ---
++ FROM node:22-bookworm
++
++ LABEL org.opencontainers.image.source="https://github.com/openclaw/openclaw" \
++   org.opencontainers.image.url="https://openclaw.ai" \
++   org.opencontainers.image.documentation="https://docs.openclaw.ai/install/docker" \
++   org.opencontainers.image.licenses="MIT" \
++   org.opencontainers.image.title="OpenClaw" \
++   org.opencontainers.image.description="OpenClaw gateway and CLI runtime container image"
++
++ WORKDIR /app
++
++ # Install runtime essentials and gosu for entrypoint permission handling
++ RUN apt-get update && apt-get install -y --no-install-recommends \
++   ca-certificates \
++   curl \
++   age \
++   git \
++   gosu \
++   && apt-get clean && rm -rf /var/lib/apt/lists/*
++
++ # Copy built assets from builder
++ COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
++ COPY --from=builder /app/dist ./dist
++ COPY --from=builder /app/dist/control-ui ./ui/dist
++ COPY --from=builder /app/openclaw.mjs ./
++ COPY --from=builder /app/scripts/healthcheck.js ./scripts/healthcheck.js
++ COPY --from=builder /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
++ COPY --from=builder /app/extensions ./extensions
++ COPY --from=builder /app/skills ./skills
++
++ # Install only production dependencies
++ RUN corepack enable && pnpm install --prod --frozen-lockfile --ignore-scripts
++
++ # Expose the CLI binary
++ RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
++   && chmod 755 /app/openclaw.mjs \
++   && chmod +x /app/scripts/docker-entrypoint.sh
++
++ # Optionally install Chromium and Docker CLI (handled via build args if requested)
++ ARG OPENCLAW_INSTALL_BROWSER=""
++ RUN if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
++   apt-get update && \
++   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb chromium && \
++   apt-get clean && rm -rf /var/lib/apt/lists/*; \
++   fi
++
++ ARG OPENCLAW_INSTALL_DOCKER_CLI=""
++ RUN if [ -n "$OPENCLAW_INSTALL_DOCKER_CLI" ]; then \
++   apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg && \
++   install -m 0755 -d /etc/apt/keyrings && \
++   curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
++   chmod a+r /etc/apt/keyrings/docker.gpg && \
++   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list && \
++   apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin && \
++   apt-get clean && rm -rf /var/lib/apt/lists/*; \
++   fi
++
++ # Final security hardening
++ ENV NODE_ENV=production
++ RUN chown -R node:node /app
++
++ HEALTHCHECK --interval=2m --timeout=10s --start-period=30s --retries=3 \
++   CMD ["node", "scripts/healthcheck.js"]
++
++ ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
++ CMD ["gateway", "--allow-unconfigured"]
++
+
+ ❯ src/dockerfile.test.ts:18:24
+     16|     expect(browserArgIndex).toBeGreaterThan(-1);
+     17|     expect(browserArgIndex).toBeGreaterThan(installIndex);
+     18|     expect(dockerfile).toContain(
+       |                        ^
+     19|       "node /app/node_modules/playwright-core/cli.js install --with-deps chromium",
+     20|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/42]⎯
+
+ FAIL  src/dockerfile.test.ts > Dockerfile > normalizes plugin and agent paths permissions in image layers
+AssertionError: expected '# --- Build Stage ---\nFROM node:22-b…' to contain 'for dir in /app/extensions /app/.agen…'
+
+- Expected
++ Received
+
+- for dir in /app/extensions /app/.agent /app/.agents
++ # --- Build Stage ---
++ FROM node:22-bookworm AS builder
++
++ # Install Bun (required for build scripts)
++ RUN curl -fsSL https://bun.sh/install | bash
++ ENV PATH="/root/.bun/bin:${PATH}"
++
++ RUN corepack enable
++
++ WORKDIR /app
++
++ # Copy dependency files first for better caching
++ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
++ COPY ui/package.json ./ui/package.json
++ COPY patches ./patches
++ COPY scripts/copy-plugin-sdk-root-alias.mjs scripts/write-plugin-sdk-entry-dts.ts scripts/canvas-a2ui-copy.ts scripts/copy-hook-metadata.ts scripts/copy-export-html-templates.ts scripts/write-build-info.ts scripts/write-cli-startup-metadata.ts scripts/write-cli-compat.ts ./scripts/
++
++ # Install dependencies
++ RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
++
++ # Copy source and build
++ COPY . .
++ RUN pnpm build
++ # Force pnpm for UI build (Bun may fail on ARM/Synology architectures)
++ ENV OPENCLAW_PREFER_PNPM=1
++ RUN pnpm ui:build
++
++ # --- Production Stage ---
++ FROM node:22-bookworm
++
++ LABEL org.opencontainers.image.source="https://github.com/openclaw/openclaw" \
++   org.opencontainers.image.url="https://openclaw.ai" \
++   org.opencontainers.image.documentation="https://docs.openclaw.ai/install/docker" \
++   org.opencontainers.image.licenses="MIT" \
++   org.opencontainers.image.title="OpenClaw" \
++   org.opencontainers.image.description="OpenClaw gateway and CLI runtime container image"
++
++ WORKDIR /app
++
++ # Install runtime essentials and gosu for entrypoint permission handling
++ RUN apt-get update && apt-get install -y --no-install-recommends \
++   ca-certificates \
++   curl \
++   age \
++   git \
++   gosu \
++   && apt-get clean && rm -rf /var/lib/apt/lists/*
++
++ # Copy built assets from builder
++ COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
++ COPY --from=builder /app/dist ./dist
++ COPY --from=builder /app/dist/control-ui ./ui/dist
++ COPY --from=builder /app/openclaw.mjs ./
++ COPY --from=builder /app/scripts/healthcheck.js ./scripts/healthcheck.js
++ COPY --from=builder /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
++ COPY --from=builder /app/extensions ./extensions
++ COPY --from=builder /app/skills ./skills
++
++ # Install only production dependencies
++ RUN corepack enable && pnpm install --prod --frozen-lockfile --ignore-scripts
++
++ # Expose the CLI binary
++ RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
++   && chmod 755 /app/openclaw.mjs \
++   && chmod +x /app/scripts/docker-entrypoint.sh
++
++ # Optionally install Chromium and Docker CLI (handled via build args if requested)
++ ARG OPENCLAW_INSTALL_BROWSER=""
++ RUN if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
++   apt-get update && \
++   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb chromium && \
++   apt-get clean && rm -rf /var/lib/apt/lists/*; \
++   fi
++
++ ARG OPENCLAW_INSTALL_DOCKER_CLI=""
++ RUN if [ -n "$OPENCLAW_INSTALL_DOCKER_CLI" ]; then \
++   apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg && \
++   install -m 0755 -d /etc/apt/keyrings && \
++   curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
++   chmod a+r /etc/apt/keyrings/docker.gpg && \
++   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list && \
++   apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin && \
++   apt-get clean && rm -rf /var/lib/apt/lists/*; \
++   fi
++
++ # Final security hardening
++ ENV NODE_ENV=production
++ RUN chown -R node:node /app
++
++ HEALTHCHECK --interval=2m --timeout=10s --start-period=30s --retries=3 \
++   CMD ["node", "scripts/healthcheck.js"]
++
++ ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
++ CMD ["gateway", "--allow-unconfigured"]
++
+
+ ❯ src/dockerfile.test.ts:26:24
+     24|   it("normalizes plugin and agent paths permissions in image layers", async () => {
+     25|     const dockerfile = await readFile(dockerfilePath, "utf8");
+     26|     expect(dockerfile).toContain("for dir in /app/extensions /app/.agent /app/.agents");
+       |                        ^
+     27|     expect(dockerfile).toContain('find "$dir" -type d -exec chmod 755 {} +');
+     28|     expect(dockerfile).toContain('find "$dir" -type f -exec chmod 644 {} +');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/42]⎯
+
+ FAIL  src/dockerfile.test.ts > Dockerfile > Docker GPG fingerprint awk uses correct quoting for OPENCLAW_SANDBOX=1 build
+AssertionError: expected '# --- Build Stage ---\nFROM node:22-b…' to contain '== "fpr" {'
+
+- Expected
++ Received
+
+- == "fpr" {
++ # --- Build Stage ---
++ FROM node:22-bookworm AS builder
++
++ # Install Bun (required for build scripts)
++ RUN curl -fsSL https://bun.sh/install | bash
++ ENV PATH="/root/.bun/bin:${PATH}"
++
++ RUN corepack enable
++
++ WORKDIR /app
++
++ # Copy dependency files first for better caching
++ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
++ COPY ui/package.json ./ui/package.json
++ COPY patches ./patches
++ COPY scripts/copy-plugin-sdk-root-alias.mjs scripts/write-plugin-sdk-entry-dts.ts scripts/canvas-a2ui-copy.ts scripts/copy-hook-metadata.ts scripts/copy-export-html-templates.ts scripts/write-build-info.ts scripts/write-cli-startup-metadata.ts scripts/write-cli-compat.ts ./scripts/
++
++ # Install dependencies
++ RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
++
++ # Copy source and build
++ COPY . .
++ RUN pnpm build
++ # Force pnpm for UI build (Bun may fail on ARM/Synology architectures)
++ ENV OPENCLAW_PREFER_PNPM=1
++ RUN pnpm ui:build
++
++ # --- Production Stage ---
++ FROM node:22-bookworm
++
++ LABEL org.opencontainers.image.source="https://github.com/openclaw/openclaw" \
++   org.opencontainers.image.url="https://openclaw.ai" \
++   org.opencontainers.image.documentation="https://docs.openclaw.ai/install/docker" \
++   org.opencontainers.image.licenses="MIT" \
++   org.opencontainers.image.title="OpenClaw" \
++   org.opencontainers.image.description="OpenClaw gateway and CLI runtime container image"
++
++ WORKDIR /app
++
++ # Install runtime essentials and gosu for entrypoint permission handling
++ RUN apt-get update && apt-get install -y --no-install-recommends \
++   ca-certificates \
++   curl \
++   age \
++   git \
++   gosu \
++   && apt-get clean && rm -rf /var/lib/apt/lists/*
++
++ # Copy built assets from builder
++ COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
++ COPY --from=builder /app/dist ./dist
++ COPY --from=builder /app/dist/control-ui ./ui/dist
++ COPY --from=builder /app/openclaw.mjs ./
++ COPY --from=builder /app/scripts/healthcheck.js ./scripts/healthcheck.js
++ COPY --from=builder /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
++ COPY --from=builder /app/extensions ./extensions
++ COPY --from=builder /app/skills ./skills
++
++ # Install only production dependencies
++ RUN corepack enable && pnpm install --prod --frozen-lockfile --ignore-scripts
++
++ # Expose the CLI binary
++ RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
++   && chmod 755 /app/openclaw.mjs \
++   && chmod +x /app/scripts/docker-entrypoint.sh
++
++ # Optionally install Chromium and Docker CLI (handled via build args if requested)
++ ARG OPENCLAW_INSTALL_BROWSER=""
++ RUN if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
++   apt-get update && \
++   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb chromium && \
++   apt-get clean && rm -rf /var/lib/apt/lists/*; \
++   fi
++
++ ARG OPENCLAW_INSTALL_DOCKER_CLI=""
++ RUN if [ -n "$OPENCLAW_INSTALL_DOCKER_CLI" ]; then \
++   apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg && \
++   install -m 0755 -d /etc/apt/keyrings && \
++   curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
++   chmod a+r /etc/apt/keyrings/docker.gpg && \
++   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list && \
++   apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin && \
++   apt-get clean && rm -rf /var/lib/apt/lists/*; \
++   fi
++
++ # Final security hardening
++ ENV NODE_ENV=production
++ RUN chown -R node:node /app
++
++ HEALTHCHECK --interval=2m --timeout=10s --start-period=30s --retries=3 \
++   CMD ["node", "scripts/healthcheck.js"]
++
++ ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
++ CMD ["gateway", "--allow-unconfigured"]
++
+
+ ❯ src/dockerfile.test.ts:33:24
+     31|   it("Docker GPG fingerprint awk uses correct quoting for OPENCLAW_SANDBOX=1 build", async () => {
+     32|     const dockerfile = await readFile(dockerfilePath, "utf8");
+     33|     expect(dockerfile).toContain('== "fpr" {');
+       |                        ^
+     34|     expect(dockerfile).not.toContain('\\"fpr\\"');
+     35|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/42]⎯
+
+ FAIL  src/cli/banner.test.ts > formatCliBannerLine > hides tagline text when cli.banner.taglineMode is off
+AssertionError: expected 'MARIE 2026.3.3 (abc1234)' to be '🦞 OpenClaw 2026.3.3 (abc1234)' // Object.is equality
+
+Expected: "🦞 OpenClaw 2026.3.3 (abc1234)"
+Received: "MARIE 2026.3.3 (abc1234)"
+
+ ❯ src/cli/banner.test.ts:31:18
+     29|     });
+     30| 
+     31|     expect(line).toBe("🦞 OpenClaw 2026.3.3 (abc1234)");
+       |                  ^
+     32|   });
+     33| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/42]⎯
+
+ FAIL  src/cli/banner.test.ts > formatCliBannerLine > uses default tagline when cli.banner.taglineMode is default
+AssertionError: expected 'MARIE 2026.3.3 (abc1234) — MARIE: You…' to be '🦞 OpenClaw 2026.3.3 (abc1234) — All …' // Object.is equality
+
+Expected: "🦞 OpenClaw 2026.3.3 (abc1234) — All your chats, one OpenClaw."
+Received: "MARIE 2026.3.3 (abc1234) — MARIE: Your Intelligent Assistant."
+
+ ❯ src/cli/banner.test.ts:44:18
+     42|     });
+     43| 
+     44|     expect(line).toBe("🦞 OpenClaw 2026.3.3 (abc1234) — All your chats, one OpenClaw.");
+       |                  ^
+     45|   });
+     46| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/42]⎯
+
+ FAIL  src/cli/banner.test.ts > formatCliBannerLine > prefers explicit tagline mode over config
+AssertionError: expected 'MARIE 2026.3.3 (abc1234) — MARIE: You…' to be '🦞 OpenClaw 2026.3.3 (abc1234) — All …' // Object.is equality
+
+Expected: "🦞 OpenClaw 2026.3.3 (abc1234) — All your chats, one OpenClaw."
+Received: "MARIE 2026.3.3 (abc1234) — MARIE: Your Intelligent Assistant."
+
+ ❯ src/cli/banner.test.ts:58:18
+     56|     });
+     57| 
+     58|     expect(line).toBe("🦞 OpenClaw 2026.3.3 (abc1234) — All your chats, one OpenClaw.");
+       |                  ^
+     59|   });
+     60| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/42]⎯
+
+ FAIL  src/cli/nodes-camera.test.ts > nodes camera helpers > builds stable temp paths when id provided
+AssertionError: expected '/tmp/marie-camera-snap-front-id1.jpg' to be '/tmp/openclaw-camera-snap-front-id1.j…' // Object.is equality
+
+Expected: "/tmp/openclaw-camera-snap-front-id1.jpg"
+Received: "/tmp/marie-camera-snap-front-id1.jpg"
+
+ ❯ src/cli/nodes-camera.test.ts:71:15
+     69|       id: "id1",
+     70|     });
+     71|     expect(p).toBe(path.join("/tmp", "openclaw-camera-snap-front-id1.jpg"));
+       |               ^
+     72|   });
+     73| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/42]⎯
+
+ FAIL  src/cli/nodes-camera.test.ts > nodes camera helpers > writes camera clip payload to temp path
+AssertionError: expected '/var/folders/98/ss6g9t1x6_b1gppqp2d64…' to be '/var/folders/98/ss6g9t1x6_b1gppqp2d64…' // Object.is equality
+
+Expected: "/var/folders/98/ss6g9t1x6_b1gppqp2d64ftr0000gn/T/openclaw-test-ABLUxX/openclaw-camera-clip-front-clip1.mp4"
+Received: "/var/folders/98/ss6g9t1x6_b1gppqp2d64ftr0000gn/T/openclaw-test-ABLUxX/marie-camera-clip-front-clip1.mp4"
+
+ ❯ src/cli/nodes-camera.test.ts:87:19
+     85|         id: "clip1",
+     86|       });
+     87|       expect(out).toBe(path.join(dir, "openclaw-camera-clip-front-clip1.mp4"));
+       |                   ^
+     88|       await expect(readFileUtf8AndCleanup(out)).resolves.toBe("hi");
+     89|     });
+ ❯ withTempDir src/test-utils/temp-dir.ts:8:12
+ ❯ withCameraTempDir src/cli/nodes-camera.test.ts:20:10
+ ❯ src/cli/nodes-camera.test.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/42]⎯
+
+ FAIL  src/cli/nodes-camera.test.ts > nodes camera helpers > writes camera clip payload from url
+AssertionError: expected '/var/folders/98/ss6g9t1x6_b1gppqp2d64…' to be '/var/folders/98/ss6g9t1x6_b1gppqp2d64…' // Object.is equality
+
+Expected: "/var/folders/98/ss6g9t1x6_b1gppqp2d64ftr0000gn/T/openclaw-test-BI65Vg/openclaw-camera-clip-back-clip2.mp4"
+Received: "/var/folders/98/ss6g9t1x6_b1gppqp2d64ftr0000gn/T/openclaw-test-BI65Vg/marie-camera-clip-back-clip2.mp4"
+
+ ❯ src/cli/nodes-camera.test.ts:108:19
+    106|         expectedHost,
+    107|       });
+    108|       expect(out).toBe(path.join(dir, "openclaw-camera-clip-back-clip2.mp4"));
+       |                   ^
+    109|       await expect(readFileUtf8AndCleanup(out)).resolves.toBe("url-clip");
+    110|     });
+ ❯ withTempDir src/test-utils/temp-dir.ts:8:12
+ ❯ withCameraTempDir src/cli/nodes-camera.test.ts:20:10
+ ❯ src/cli/nodes-camera.test.ts:94:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/42]⎯
+
+ FAIL  src/cli/profile.test.ts > formatCliCommand > returns command unchanged when 'no profile is set'
+ FAIL  src/cli/profile.test.ts > formatCliCommand > returns command unchanged when 'profile is default'
+ FAIL  src/cli/profile.test.ts > formatCliCommand > returns command unchanged when 'profile is Default (case-insensitive)'
+ FAIL  src/cli/profile.test.ts > formatCliCommand > returns command unchanged when 'profile is invalid'
+AssertionError: expected 'marie doctor --fix' to be 'openclaw doctor --fix' // Object.is equality
+
+Expected: "openclaw doctor --fix"
+Received: "marie doctor --fix"
+
+ ❯ src/cli/profile.test.ts:142:40
+    140|     },
+    141|   ])("returns command unchanged when $name", ({ cmd, env, expected }) => {
+    142|     expect(formatCliCommand(cmd, env)).toBe(expected);
+       |                                        ^
+    143|   });
+    144| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/42]⎯
+
+ FAIL  src/cli/profile.test.ts > formatCliCommand > returns command unchanged when '--profile is already present'
+AssertionError: expected 'marie --profile work doctor --fix' to be 'openclaw --profile work doctor --fix' // Object.is equality
+
+Expected: "openclaw --profile work doctor --fix"
+Received: "marie --profile work doctor --fix"
+
+ ❯ src/cli/profile.test.ts:142:40
+    140|     },
+    141|   ])("returns command unchanged when $name", ({ cmd, env, expected }) => {
+    142|     expect(formatCliCommand(cmd, env)).toBe(expected);
+       |                                        ^
+    143|   });
+    144| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/42]⎯
+
+ FAIL  src/cli/profile.test.ts > formatCliCommand > returns command unchanged when '--dev is already present'
+AssertionError: expected 'marie --dev doctor' to be 'openclaw --dev doctor' // Object.is equality
+
+Expected: "openclaw --dev doctor"
+Received: "marie --dev doctor"
+
+ ❯ src/cli/profile.test.ts:142:40
+    140|     },
+    141|   ])("returns command unchanged when $name", ({ cmd, env, expected }) => {
+    142|     expect(formatCliCommand(cmd, env)).toBe(expected);
+       |                                        ^
+    143|   });
+    144| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/42]⎯
+
+ FAIL  src/cli/profile.test.ts > formatCliCommand > inserts --profile flag when profile is set
+AssertionError: expected 'marie doctor --fix' to be 'openclaw --profile work doctor --fix' // Object.is equality
+
+Expected: "openclaw --profile work doctor --fix"
+Received: "marie doctor --fix"
+
+ ❯ src/cli/profile.test.ts:146:85
+    144| 
+    145|   it("inserts --profile flag when profile is set", () => {
+    146|     expect(formatCliCommand("openclaw doctor --fix", { OPENCLAW_PROFILE: "work" })).toBe(
+       |                                                                                     ^
+    147|       "openclaw --profile work doctor --fix",
+    148|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/42]⎯
+
+ FAIL  src/cli/profile.test.ts > formatCliCommand > trims whitespace from profile
+AssertionError: expected 'marie doctor --fix' to be 'openclaw --profile jbopenclaw doctor …' // Object.is equality
+
+Expected: "openclaw --profile jbopenclaw doctor --fix"
+Received: "marie doctor --fix"
+
+ ❯ src/cli/profile.test.ts:152:95
+    150| 
+    151|   it("trims whitespace from profile", () => {
+    152|     expect(formatCliCommand("openclaw doctor --fix", { OPENCLAW_PROFILE: "  jbopenclaw  " })).toBe(
+       |                                                                                               ^
+    153|       "openclaw --profile jbopenclaw doctor --fix",
+    154|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/42]⎯
+
+ FAIL  src/cli/profile.test.ts > formatCliCommand > handles command with no args after openclaw
+AssertionError: expected 'marie' to be 'openclaw --profile test' // Object.is equality
+
+Expected: "openclaw --profile test"
+Received: "marie"
+
+ ❯ src/cli/profile.test.ts:158:72
+    156| 
+    157|   it("handles command with no args after openclaw", () => {
+    158|     expect(formatCliCommand("openclaw", { OPENCLAW_PROFILE: "test" })).toBe(
+       |                                                                        ^
+    159|       "openclaw --profile test",
+    160|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/42]⎯
+
+ FAIL  src/cli/profile.test.ts > formatCliCommand > handles pnpm wrapper
+AssertionError: expected 'pnpm marie doctor' to be 'pnpm openclaw --profile work doctor' // Object.is equality
+
+Expected: "pnpm openclaw --profile work doctor"
+Received: "pnpm marie doctor"
+
+ ❯ src/cli/profile.test.ts:164:84
+    162| 
+    163|   it("handles pnpm wrapper", () => {
+    164|     expect(formatCliCommand("pnpm openclaw doctor", { OPENCLAW_PROFILE: "work" })).toBe(
+       |                                                                                    ^
+    165|       "pnpm openclaw --profile work doctor",
+    166|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/42]⎯
+
+ FAIL  src/pairing/pairing-messages.test.ts > buildPairingReply > formats pairing reply for telegram
+AssertionError: expected 'OpenClaw: access not configured.\n\nY…' to match /(?:openclaw|openclaw) --profile isola…/
+
+- Expected: 
+/(?:openclaw|openclaw) --profile isolated pairing approve telegram QRS678/
+
++ Received: 
+"OpenClaw: access not configured.
+
+Your Telegram user id: 42
+
+Pairing code: QRS678
+
+Ask the bot owner to approve with:
+marie pairing approve telegram QRS678"
+
+ ❯ src/pairing/pairing-messages.test.ts:59:20
+     57|         `(?:openclaw|openclaw) --profile isolated pairing approve ${testCase.channel} ${testCase.code}`,
+     58|       );
+     59|       expect(text).toMatch(commandRe);
+       |                    ^
+     60|     });
+     61|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/42]⎯
+
+ FAIL  src/pairing/pairing-messages.test.ts > buildPairingReply > formats pairing reply for discord
+AssertionError: expected 'OpenClaw: access not configured.\n\nY…' to match /(?:openclaw|openclaw) --profile isola…/
+
+- Expected: 
+/(?:openclaw|openclaw) --profile isolated pairing approve discord ABC123/
+
++ Received: 
+"OpenClaw: access not configured.
+
+Your Discord user id: 1
+
+Pairing code: ABC123
+
+Ask the bot owner to approve with:
+marie pairing approve discord ABC123"
+
+ ❯ src/pairing/pairing-messages.test.ts:59:20
+     57|         `(?:openclaw|openclaw) --profile isolated pairing approve ${testCase.channel} ${testCase.code}`,
+     58|       );
+     59|       expect(text).toMatch(commandRe);
+       |                    ^
+     60|     });
+     61|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/42]⎯
+
+ FAIL  src/pairing/pairing-messages.test.ts > buildPairingReply > formats pairing reply for slack
+AssertionError: expected 'OpenClaw: access not configured.\n\nY…' to match /(?:openclaw|openclaw) --profile isola…/
+
+- Expected: 
+/(?:openclaw|openclaw) --profile isolated pairing approve slack DEF456/
+
++ Received: 
+"OpenClaw: access not configured.
+
+Your Slack user id: U1
+
+Pairing code: DEF456
+
+Ask the bot owner to approve with:
+marie pairing approve slack DEF456"
+
+ ❯ src/pairing/pairing-messages.test.ts:59:20
+     57|         `(?:openclaw|openclaw) --profile isolated pairing approve ${testCase.channel} ${testCase.code}`,
+     58|       );
+     59|       expect(text).toMatch(commandRe);
+       |                    ^
+     60|     });
+     61|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/42]⎯
+
+ FAIL  src/pairing/pairing-messages.test.ts > buildPairingReply > formats pairing reply for signal
+AssertionError: expected 'OpenClaw: access not configured.\n\nY…' to match /(?:openclaw|openclaw) --profile isola…/
+
+- Expected: 
+/(?:openclaw|openclaw) --profile isolated pairing approve signal GHI789/
+
++ Received: 
+"OpenClaw: access not configured.
+
+Your Signal number: +15550001111
+
+Pairing code: GHI789
+
+Ask the bot owner to approve with:
+marie pairing approve signal GHI789"
+
+ ❯ src/pairing/pairing-messages.test.ts:59:20
+     57|         `(?:openclaw|openclaw) --profile isolated pairing approve ${testCase.channel} ${testCase.code}`,
+     58|       );
+     59|       expect(text).toMatch(commandRe);
+       |                    ^
+     60|     });
+     61|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/42]⎯
+
+ FAIL  src/pairing/pairing-messages.test.ts > buildPairingReply > formats pairing reply for imessage
+AssertionError: expected 'OpenClaw: access not configured.\n\nY…' to match /(?:openclaw|openclaw) --profile isola…/
+
+- Expected: 
+/(?:openclaw|openclaw) --profile isolated pairing approve imessage JKL012/
+
++ Received: 
+"OpenClaw: access not configured.
+
+Your iMessage sender id: +15550002222
+
+Pairing code: JKL012
+
+Ask the bot owner to approve with:
+marie pairing approve imessage JKL012"
+
+ ❯ src/pairing/pairing-messages.test.ts:59:20
+     57|         `(?:openclaw|openclaw) --profile isolated pairing approve ${testCase.channel} ${testCase.code}`,
+     58|       );
+     59|       expect(text).toMatch(commandRe);
+       |                    ^
+     60|     });
+     61|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/42]⎯
+
+ FAIL  src/pairing/pairing-messages.test.ts > buildPairingReply > formats pairing reply for whatsapp
+AssertionError: expected 'OpenClaw: access not configured.\n\nY…' to match /(?:openclaw|openclaw) --profile isola…/
+
+- Expected: 
+/(?:openclaw|openclaw) --profile isolated pairing approve whatsapp MNO345/
+
++ Received: 
+"OpenClaw: access not configured.
+
+Your WhatsApp phone number: +15550003333
+
+Pairing code: MNO345
+
+Ask the bot owner to approve with:
+marie pairing approve whatsapp MNO345"
+
+ ❯ src/pairing/pairing-messages.test.ts:59:20
+     57|         `(?:openclaw|openclaw) --profile isolated pairing approve ${testCase.channel} ${testCase.code}`,
+     58|       );
+     59|       expect(text).toMatch(commandRe);
+       |                    ^
+     60|     });
+     61|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/42]⎯
+
+ FAIL  src/utils/joy-zoning.test.ts > JoyZoning Utility > getLayer > defaults to Plumbing for non-src paths
+AssertionError: expected 'Core' to be 'Plumbing' // Object.is equality
+
+Expected: "Plumbing"
+Received: "Core"
+
+ ❯ src/utils/joy-zoning.test.ts:64:40
+     62| 
+     63|     it("defaults to Plumbing for non-src paths", () => {
+     64|       expect(getLayer("package.json")).toBe("Plumbing");
+       |                                        ^
+     65|       expect(getLayer("scripts/build.ts")).toBe("Plumbing");
+     66|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/42]⎯
+
+ FAIL  src/utils/joy-zoning.test.ts > JoyZoning Utility > getTargetPath > extracts from 'path'
+TypeError: (0 , __vite_ssr_import_1__.getTargetPath) is not a function
+ ❯ src/utils/joy-zoning.test.ts:260:14
+    258|   describe("getTargetPath", () => {
+    259|     it("extracts from 'path'", () => {
+    260|       expect(getTargetPath({ path: "/foo/bar.ts" })).toBe("/foo/bar.ts");
+       |              ^
+    261|     });
+    262| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/42]⎯
+
+ FAIL  src/utils/joy-zoning.test.ts > JoyZoning Utility > getTargetPath > extracts from 'file_path'
+TypeError: (0 , __vite_ssr_import_1__.getTargetPath) is not a function
+ ❯ src/utils/joy-zoning.test.ts:264:14
+    262| 
+    263|     it("extracts from 'file_path'", () => {
+    264|       expect(getTargetPath({ file_path: "/foo/bar.ts" })).toBe("/foo/bar.ts");
+       |              ^
+    265|     });
+    266| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/42]⎯
+
+ FAIL  src/utils/joy-zoning.test.ts > JoyZoning Utility > getTargetPath > extracts from 'absolutePath'
+TypeError: (0 , __vite_ssr_import_1__.getTargetPath) is not a function
+ ❯ src/utils/joy-zoning.test.ts:268:14
+    266| 
+    267|     it("extracts from 'absolutePath'", () => {
+    268|       expect(getTargetPath({ absolutePath: "/foo/bar.ts" })).toBe("/foo/bar.ts");
+       |              ^
+    269|     });
+    270| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/42]⎯
+
+ FAIL  src/utils/joy-zoning.test.ts > JoyZoning Utility > getTargetPath > returns null for missing params
+TypeError: (0 , __vite_ssr_import_1__.getTargetPath) is not a function
+ ❯ src/utils/joy-zoning.test.ts:272:14
+    270| 
+    271|     it("returns null for missing params", () => {
+    272|       expect(getTargetPath(null)).toBeNull();
+       |              ^
+    273|       expect(getTargetPath(undefined)).toBeNull();
+    274|       expect(getTargetPath({})).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/42]⎯
+
+ FAIL  src/utils/joy-zoning.test.ts > JoyZoning Utility > getCorrectionHint > generates fix for import violations
+AssertionError: expected '💡 Architectural Guidance:\n  → Revie…' to contain 'Move the import'
+
+- Expected
++ Received
+
+- Move the import
++ 💡 Architectural Guidance:
++   → Review the violations and restructure according to Joy-Zoning rules.
+
+ ❯ src/utils/joy-zoning.test.ts:295:20
+    293|     it("generates fix for import violations", () => {
+    294|       const hint = getCorrectionHint(["Domain layer should not depend on Infrastructure"]);
+    295|       expect(hint).toContain("Move the import");
+       |                    ^
+    296|     });
+    297| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/42]⎯
+
+ FAIL  src/utils/joy-zoning.test.ts > JoyZoning Utility > getCorrectionHint > deduplicates fixes
+AssertionError: expected undefined to be 1 // Object.is equality
+
+- Expected: 
+1
+
++ Received: 
+undefined
+
+ ❯ src/utils/joy-zoning.test.ts:305:54
+    303|     it("deduplicates fixes", () => {
+    304|       const hint = getCorrectionHint(["import error A", "import error B"]);
+    305|       expect(hint.match(/Move the import/g)?.length).toBe(1);
+       |                                                      ^
+    306|     });
+    307|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/42]⎯
+
+ FAIL  src/slack/monitor.tool-result.test.ts > monitorSlackProvider tool results > treats parent_user_id as a thread reply even when thread_ts matches ts
+AssertionError: expected 'agent:main:slack:direct:u1:thread:123' to be 'agent:main:main:thread:123' // Object.is equality
+
+Expected: "agent:main:main:thread:123"
+Received: "agent:main:slack:direct:u1:thread:123"
+
+ ❯ src/slack/monitor.tool-result.test.ts:601:28
+    599|     expect(replyMock).toHaveBeenCalledTimes(1);
+    600|     const ctx = getFirstReplySessionCtx();
+    601|     expect(ctx.SessionKey).toBe("agent:main:main:thread:123");
+       |                            ^
+    602|     expect(ctx.ParentSessionKey).toBeUndefined();
+    603|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/42]⎯
+
+ FAIL  src/tui/tui.test.ts > resolveGatewayDisconnectState > returns pairing recovery guidance when disconnect reason requires pairing
+AssertionError: expected 'pairing required: run marie devices l…' to be 'pairing required: run openclaw device…' // Object.is equality
+
+Expected: "pairing required: run openclaw devices list"
+Received: "pairing required: run marie devices list"
+
+ ❯ src/tui/tui.test.ts:114:34
+    112|     const state = resolveGatewayDisconnectState("gateway closed (1008): pairing required");
+    113|     expect(state.connectionStatus).toContain("pairing required");
+    114|     expect(state.activityStatus).toBe("pairing required: run openclaw devices list");
+       |                                  ^
+    115|     expect(state.pairingHint).toContain("openclaw devices list");
+    116|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/42]⎯
+
+ FAIL  src/cli/daemon-cli/install.integration.test.ts > runDaemonInstall integration > auto-mints token when no source exists and persists the same token used for install env
+AssertionError: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ src/cli/daemon-cli/install.integration.test.ts:141:35
+    139|     const gateway = (updated.gateway ?? {}) as { auth?: { token?: string } };
+    140|     const persistedToken = gateway.auth?.token;
+    141|     expect(typeof persistedToken).toBe("string");
+       |                                   ^
+    142|     expect((persistedToken ?? "").length).toBeGreaterThan(0);
+    143| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/42]⎯
+
+ FAIL  src/cli/daemon-cli/lifecycle.test.ts > runDaemonRestart health checks > fails restart when gateway remains unhealthy
+AssertionError: expected Error: Gateway restart timed out after 60… { hints: [ …(2) ] } to match object { …(2) }
+
+- Expected
++ Received
+
+- {
++ Error {
+    "hints": [
+-     "openclaw gateway status --deep",
+-     "openclaw doctor",
++     "marie gateway status --deep",
++     "marie doctor",
+    ],
+-   "message": "Gateway restart timed out after 60s waiting for health checks.",
+  }
+
+ ❯ src/cli/daemon-cli/lifecycle.test.ts:129:5
+    127|     waitForGatewayHealthyRestart.mockResolvedValue(unhealthy);
+    128| 
+    129|     await expect(runDaemonRestart({ json: true })).rejects.toMatchObject({
+       |     ^
+    130|       message: "Gateway restart timed out after 60s waiting for health checks.",
+    131|       hints: ["openclaw gateway status --deep", "openclaw doctor"],
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/42]⎯
+
+ FAIL  src/cli/program/help.test.ts > configureProgramHelp > includes banner and docs/examples in root help output
+AssertionError: expected '\nBANNER-LINE\n\nUsage: openclaw [opt…' to contain 'https://docs.openclaw.ai/cli'
+
+- Expected
++ Received
+
+- https://docs.openclaw.ai/cli
++
++ BANNER-LINE
++
++ Usage: openclaw [options] [command]
++
++ Options:
++   --dev                Dev profile: isolate state under ~/.openclaw-dev, default
++                        gateway port 19001, and shift derived ports
++                        (browser/canvas)
++   -h, --help           Display help for command
++   --log-level <level>  Global log level override for file + console
++                        (silent|fatal|error|warn|info|debug|trace)
++   --no-color           Disable ANSI colors
++   --profile <name>     Use a named profile (isolates
++                        OPENCLAW_STATE_DIR/OPENCLAW_CONFIG_PATH under
++                        ~/.openclaw-<name>)
++   -V, --version        output the version number
++
++ Commands:
++   Hint: commands suffixed with * have subcommands. Run <command> --help for details.
++   help                 Display help for command
++   models *             models
++   status               status
++
++ Examples:
++   marie models --help
++     Show detailed help for the models command.
++   marie channels login --verbose
++     Link personal WhatsApp Web and show QR + connection logs.
++   marie message send --target +15555550123 --message "Hi" --json
++     Send via your web session and print JSON result.
++   marie gateway --port 18789
++     Run the WebSocket Gateway locally.
++   marie --dev gateway
++     Run a dev Gateway (isolated state/config) on ws://127.0.0.1:19001.
++   marie gateway --force
++     Kill anything bound to the default gateway port, then start it.
++   marie gateway ...
++     Gateway control via WebSocket.
++   marie agent --to +15555550123 --message "Run summary" --deliver
++     Talk directly to the agent using the Gateway; optionally send the WhatsApp reply.
++   marie message send --channel telegram --target @mychat --message "Hi"
++     Send via your Telegram bot.
++
++ Docs: https://docs.marieai.com/cli
++
++
+
+ ❯ src/cli/program/help.test.ts:107:18
+    105|     expect(help).toContain("BANNER-LINE");
+    106|     expect(help).toContain("Examples:");
+    107|     expect(help).toContain("https://docs.openclaw.ai/cli");
+       |                  ^
+    108|   });
+    109| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/42]⎯
+
+ FAIL  src/cli/program/register.setup.test.ts > registerSetupCommand > runs setup command by default
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…}, …(1) ]
+
+Number of calls: 0
+
+ ❯ src/cli/program/register.setup.test.ts:46:30
+     44|     await runCli(["setup", "--workspace", "/tmp/ws"]);
+     45| 
+     46|     expect(setupCommandMock).toHaveBeenCalledWith(
+       |                              ^
+     47|       expect.objectContaining({
+     48|         workspace: "/tmp/ws",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/42]⎯
+
+ FAIL  src/cli/program/register.setup.test.ts > registerSetupCommand > reports setup errors through runtime
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'Error: setup failed' ]
+
+Number of calls: 0
+
+ ❯ src/cli/program/register.setup.test.ts:86:27
+     84|     await runCli(["setup"]);
+     85| 
+     86|     expect(runtime.error).toHaveBeenCalledWith("Error: setup failed");
+       |                           ^
+     87|     expect(runtime.exit).toHaveBeenCalledWith(1);
+     88|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/42]⎯
+
+ FAIL  src/slack/monitor/monitor.test.ts > resolveSlackSystemEventSessionKey > routes DM system events through direct-peer bindings when sender is known
+AssertionError: expected 'agent:ops-dm:slack:direct:u123' to be 'agent:ops-dm:main' // Object.is equality
+
+Expected: "agent:ops-dm:main"
+Received: "agent:ops-dm:slack:direct:u123"
+
+ ❯ src/slack/monitor/monitor.test.ts:232:7
+    230|         senderId: "U123",
+    231|       }),
+    232|     ).toBe("agent:ops-dm:main");
+       |       ^
+    233|   });
+    234| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/42]⎯
+
+ FAIL  src/channels/plugins/onboarding/whatsapp.test.ts > whatsappOnboardingAdapter.configure > shows follow-up login command note when not linked and linking is skipped
+AssertionError: expected "vi.fn()" to be called with arguments: [ StringContaining{…}, 'WhatsApp' ]
+
+Received: 
+
+  1st vi.fn() call:
+
+  [
+-   StringContaining "openclaw channels login",
+-   "WhatsApp",
++   "Scan the QR with WhatsApp on your phone.
++ Credentials are stored under /tmp/openclaw-whatsapp-test/ for future runs.
++ Docs: https://docs.marieai.com/whatsapp",
++   "WhatsApp linking",
+  ]
+
+  2nd vi.fn() call:
+
+  [
+-   StringContaining "openclaw channels login",
++   "Run `marie channels login` later to link WhatsApp.",
+    "WhatsApp",
+  ]
+
+  3rd vi.fn() call:
+
+  [
+-   StringContaining "openclaw channels login",
+-   "WhatsApp",
++   "WhatsApp direct chats are gated by `channels.whatsapp.dmPolicy` + `channels.whatsapp.allowFrom`.
++ - pairing (default): unknown senders get a pairing code; owner approves
++ - allowlist: unknown senders are blocked
++ - open: public inbound DMs (requires allowFrom to include \"*\")
++ - disabled: ignore WhatsApp DMs
++
++ Current: dmPolicy=pairing, allowFrom=unset
++ Docs: https://docs.marieai.com/whatsapp",
++   "WhatsApp DM access",
+  ]
+
+
+Number of calls: 3
+
+ ❯ src/channels/plugins/onboarding/whatsapp.test.ts:262:26
+    260|     });
+    261| 
+    262|     expect(harness.note).toHaveBeenCalledWith(
+       |                          ^
+    263|       expect.stringContaining("openclaw channels login"),
+    264|       "WhatsApp",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/42]⎯
+
+
+ Test Files  15 failed | 819 passed | 1 skipped (835)
+      Tests  42 failed | 6877 passed | 2 skipped (6921)
+   Start at  10:55:31
+   Duration  117.80s (transform 54.38s, setup 101.00s, import 861.70s, tests 45.59s, environment 92ms)
+
+ ELIFECYCLE  Command failed with exit code 1.
+Exit Code: 1
+Process Group PGID: 20851 

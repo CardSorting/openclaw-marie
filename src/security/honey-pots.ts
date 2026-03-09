@@ -1,5 +1,5 @@
-import { createSubsystemLogger } from "../logging/subsystem.js";
 import { randomBytes } from "node:crypto";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 
 const log = createSubsystemLogger("security/honey-pots");
 

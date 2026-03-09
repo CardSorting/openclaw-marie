@@ -58,6 +58,67 @@ export function resolveDefaultAuthChoice(
   return undefined;
 }
 
+export type AutoDetectedCapability = {
+  id: string;
+  type: "llm" | "search";
+  provider: string;
+  label: string;
+};
+
+export function resolveAutoDetectedCapabilities(
+  env: Record<string, string | undefined> = process.env,
+): AutoDetectedCapability[] {
+  const caps: AutoDetectedCapability[] = [];
+
+  // LLM detection
+  const authDefault = resolveDefaultAuthChoice(env);
+  if (authDefault) {
+    const provider = Object.keys(PROVIDER_ENV_VARS).find((p) => {
+      const vars = PROVIDER_ENV_VARS[p];
+      return vars?.some((v) => env[v]?.trim());
+    });
+    if (provider) {
+      caps.push({
+        id: authDefault,
+        type: "llm",
+        provider,
+        label: provider.charAt(0).toUpperCase() + provider.slice(1),
+      });
+    }
+  }
+
+  // Search detection
+  if (env.PERPLEXITY_API_KEY?.trim()) {
+    caps.push({ id: "perplexity", type: "search", provider: "perplexity", label: "Perplexity" });
+  } else if (env.BRAVE_API_KEY?.trim()) {
+    caps.push({ id: "brave", type: "search", provider: "brave", label: "Brave" });
+  }
+
+  return caps;
+}
+
+/**
+ * Detect the best default channel choice from the environment.
+ * Prioritizes Telegram, then Slack, Discord, etc.
+ */
+export function resolveDefaultChannelChoice(
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  if (env.TELEGRAM_BOT_TOKEN?.trim()) {
+    return "telegram";
+  }
+  if (env.SLACK_BOT_TOKEN?.trim() || env.SLACK_APP_TOKEN?.trim()) {
+    return "slack";
+  }
+  if (env.DISCORD_BOT_TOKEN?.trim()) {
+    return "discord";
+  }
+  if (env.WHATSAPP_ACCOUNT_ID?.trim()) {
+    return "whatsapp";
+  }
+  return undefined;
+}
+
 export function guardCancel<T>(value: T | symbol, runtime: RuntimeEnv): T {
   if (isCancel(value)) {
     cancel(stylePromptTitle("Setup cancelled.") ?? "Setup cancelled.");
@@ -287,6 +348,48 @@ export async function openUrl(url: string): Promise<boolean> {
     // ignore; we still print the URL for manual open
     return false;
   }
+}
+
+/**
+ * Resolve the URL to the provider's API key console.
+ */
+export function resolveProviderConsoleUrl(provider: string): string | undefined {
+  switch (provider.toLowerCase()) {
+    case "openai":
+      return "https://platform.openai.com/api-keys";
+    case "anthropic":
+      return "https://console.anthropic.com/settings/keys";
+    case "openrouter":
+      return "https://openrouter.ai/keys";
+    case "google":
+    case "gemini":
+      return "https://aistudio.google.com/app/apikey";
+    case "mistral":
+      return "https://console.mistral.ai/api-keys";
+    case "together":
+      return "https://api.together.xyz/settings/api-keys";
+    case "deepseek":
+      return "https://platform.deepseek.com/api_keys";
+    case "venice":
+      return "https://venice.ai/settings/api";
+    case "opencode":
+      return "https://opencode.ai/auth";
+    case "qianfan":
+      return "https://console.bce.baidu.com/qianfan/ais/console/apiKey";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Open the provider's API key console in the default browser.
+ */
+export async function openProviderConsole(provider: string): Promise<boolean> {
+  const url = resolveProviderConsoleUrl(provider);
+  if (!url) {
+    return false;
+  }
+  return await openUrl(url);
 }
 
 export async function openUrlInBackground(url: string): Promise<boolean> {

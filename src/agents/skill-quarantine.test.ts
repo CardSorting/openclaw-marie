@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { SkillQuarantine } from "./skill-quarantine.js";
 import * as scanner from "../security/skill-scanner.js";
+import { SkillQuarantine } from "./skill-quarantine.js";
 
 vi.mock("../security/skill-scanner.js", () => ({
   scanDirectoryWithSummary: vi.fn(),

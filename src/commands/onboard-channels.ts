@@ -17,6 +17,7 @@ import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.j
 import type { RuntimeEnv } from "../runtime.js";
 import { formatDocsLink } from "../terminal/links.js";
 import type { WizardPrompter, WizardSelectOption } from "../wizard/prompts.js";
+import { resolveDefaultChannelChoice } from "./onboard-helpers.js";
 import type { ChannelChoice } from "./onboard-types.js";
 import {
   ensureOnboardingPluginInstalled,
@@ -347,7 +348,9 @@ export async function setupChannels(
   await noteChannelPrimer(prompter, primerChannels);
 
   const quickstartDefault =
-    options?.initialSelection?.[0] ?? resolveQuickstartDefault(statusByChannel);
+    options?.initialSelection?.[0] ??
+    resolveDefaultChannelChoice(process.env) ??
+    resolveQuickstartDefault(statusByChannel);
 
   const shouldPromptAccountIds = options?.promptAccountIds === true;
   const accountIdsByChannel = new Map<ChannelChoice, string>();
@@ -397,17 +400,29 @@ export async function setupChannels(
       id: ChannelChoice;
       meta: { id: string; label: string; selectionLabel?: string };
     }>,
-  ) =>
-    entries.map((entry) => {
+  ) => {
+    const detectedChannel = resolveDefaultChannelChoice(process.env);
+    return entries.map((entry) => {
       const status = statusByChannel.get(entry.id);
       const disabledHint = resolveDisabledHint(entry.id);
-      const hint = [status?.selectionHint, disabledHint].filter(Boolean).join(" · ") || undefined;
+      const isDetected = detectedChannel === entry.id;
+      const isRecommended = entry.id === "telegram" || entry.id === "whatsapp";
+
+      const hintParts = [status?.selectionHint, disabledHint];
+      if (isDetected) {
+        hintParts.unshift("[DETECTED]");
+      } else if (isRecommended) {
+        hintParts.unshift("[RECOMMENDED]");
+      }
+
+      const hint = hintParts.filter(Boolean).join(" · ") || undefined;
       return {
         value: entry.meta.id,
         label: entry.meta.selectionLabel ?? entry.meta.label,
         ...(hint ? { hint } : {}),
       };
     });
+  };
 
   const getChannelEntries = () => {
     const core = listChatChannels();
