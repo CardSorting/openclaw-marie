@@ -6,8 +6,8 @@ import type { OpenClawConfig } from "../../config/config.js";
 import { log } from "./logger.js";
 
 const OPENROUTER_APP_HEADERS: Record<string, string> = {
-  "HTTP-Referer": "https://openclaw.ai",
-  "X-Title": "OpenClaw",
+  "HTTP-Referer": "https://mariecoder.com/",
+  "X-Title": "MarieCoder",
 };
 const ANTHROPIC_CONTEXT_1M_BETA = "context-1m-2025-08-07";
 const ANTHROPIC_1M_MODEL_PREFIXES = ["claude-opus-4", "claude-sonnet-4"] as const;
