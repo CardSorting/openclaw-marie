@@ -2,6 +2,7 @@ export type WizardSelectOption<T = string> = {
   value: T;
   label: string;
   hint?: string;
+  disabled?: boolean;
 };
 
 export type WizardSelectParams<T = string> = {

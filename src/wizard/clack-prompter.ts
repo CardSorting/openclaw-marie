@@ -67,7 +67,7 @@ export function createClackPrompter(): WizardPrompter {
         await select({
           message: stylePromptMessage(params.message),
           options: params.options.map((opt) => {
-            const base = { value: opt.value, label: opt.label };
+            const base = { value: opt.value, label: opt.label, disabled: opt.disabled };
             return opt.hint === undefined ? base : { ...base, hint: stylePromptHint(opt.hint) };
           }) as Option<(typeof params.options)[number]["value"]>[],
           initialValue: params.initialValue,
@@ -75,7 +75,7 @@ export function createClackPrompter(): WizardPrompter {
       ),
     multiselect: async (params) => {
       const options = params.options.map((opt) => {
-        const base = { value: opt.value, label: opt.label };
+        const base = { value: opt.value, label: opt.label, disabled: opt.disabled };
         return opt.hint === undefined ? base : { ...base, hint: stylePromptHint(opt.hint) };
       }) as Option<(typeof params.options)[number]["value"]>[];
 

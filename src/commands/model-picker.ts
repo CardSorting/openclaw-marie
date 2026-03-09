@@ -26,6 +26,41 @@ const PROVIDER_FILTER_THRESHOLD = 30;
 // directly callable via API and would cause "Unknown model" errors if selected manually.
 const HIDDEN_ROUTER_MODELS = new Set(["openrouter/auto"]);
 
+const RECOMMENDED_MODELS: Record<string, string[]> = {
+  openrouter: [
+    "anthropic/claude-4.6-sonnet",
+    "anthropic/claude-4.6-opus",
+    "google/gemini-3-flash-preview",
+    "google/gemini-2.5-flash",
+    "openai/gpt-5-nano",
+    "openai/gpt-5.2",
+    "deepseek/deepseek-v3.2",
+    "minimax/minimax-m2.5",
+    "x-ai/grok-4.1-fast",
+    "stepfun/step-3.5-flash",
+    "moonshot/kimi-k2.5",
+    "z-ai/glm-5",
+    "openai/gpt-oss-120b",
+    "arcee-ai/trinity-large-preview",
+  ],
+  anthropic: [
+    "claude-4.6-sonnet-latest",
+    "claude-4.6-opus-latest",
+    "claude-4.5-sonnet",
+    "claude-4.5-haiku",
+  ],
+  google: [
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+  ],
+  openai: ["gpt-5-nano", "gpt-5.2", "gpt-4o", "gpt-4o-mini", "gpt-oss-120b"],
+  deepseek: ["deepseek-v3.2", "deepseek-chat"],
+  minimax: ["minimax-m2.5"],
+  zai: ["glm-5"],
+};
+
 type PromptDefaultModelParams = {
   config: OpenClawConfig;
   prompter: WizardPrompter;
@@ -162,9 +197,9 @@ async function promptManualModel(params: {
   initialValue?: string;
 }): Promise<PromptDefaultModelResult> {
   const modelInput = await params.prompter.text({
-    message: params.allowBlank ? "Default model (blank to keep)" : "Default model",
+    message: params.allowBlank ? "Custom model ID (blank to keep)" : "Enter custom model ID",
     initialValue: params.initialValue,
-    placeholder: "provider/model",
+    placeholder: "e.g. anthropic/claude-3-7-sonnet or custom-provider/model-id",
     validate: params.allowBlank ? undefined : (value) => (value?.trim() ? undefined : "Required"),
   });
   const model = String(modelInput ?? "").trim();
@@ -296,9 +331,23 @@ export async function promptDefaultModel(
 
   const seen = new Set<string>();
 
+  const recommendedKeys = preferredProvider ? (RECOMMENDED_MODELS[preferredProvider] ?? []) : [];
+  const recommendedOptions: WizardSelectOption[] = [];
+  const otherOptions: WizardSelectOption[] = [];
+
   for (const entry of models) {
-    addModelSelectOption({ entry, options, seen, aliasIndex, hasAuth });
+    const key = modelKey(entry.provider, entry.id);
+    const targetList = recommendedKeys.includes(key) ? recommendedOptions : otherOptions;
+    addModelSelectOption({ entry, options: targetList, seen, aliasIndex, hasAuth });
   }
+
+  if (recommendedOptions.length > 0) {
+    options.push({ value: "---", label: "--- RECOMMENDED ---", disabled: true });
+    options.push(...recommendedOptions);
+    options.push({ value: "---", label: "--- ALL MODELS ---", disabled: true });
+  }
+
+  options.push(...otherOptions);
 
   if (configuredKey && !seen.has(configuredKey)) {
     options.push({
