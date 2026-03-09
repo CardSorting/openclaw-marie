@@ -358,15 +358,23 @@ export async function finalizeOnboardingWizard(
       "Token",
     );
 
-    hatchChoice = await prompter.select({
-      message: "How do you want to hatch your bot?",
-      options: [
-        { value: "tui", label: "Hatch in TUI (recommended)" },
-        { value: "web", label: "Open the Web UI" },
-        { value: "later", label: "Do this later" },
-      ],
-      initialValue: "tui",
-    });
+    if (flow === "quickstart") {
+      hatchChoice = "tui";
+      await prompter.note(
+        "QuickStart is hatching your bot in TUI (recommended for interactive setup).",
+        "Hatch",
+      );
+    } else {
+      hatchChoice = await prompter.select({
+        message: "How do you want to hatch your bot?",
+        options: [
+          { value: "tui", label: "Hatch in TUI (recommended)" },
+          { value: "web", label: "Open the Web UI" },
+          { value: "later", label: "Do this later" },
+        ],
+        initialValue: "tui",
+      });
+    }
 
     if (hatchChoice === "tui") {
       restoreTerminalState("pre-onboarding tui", { resumeStdinIfPaused: true });

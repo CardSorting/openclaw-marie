@@ -24,16 +24,34 @@ const AUTH_CHOICE_GROUP_DEFS: {
   choices: AuthChoice[];
 }[] = [
   {
-    value: "openai",
-    label: "OpenAI",
-    hint: "Codex OAuth + API key",
-    choices: ["openai-codex", "openai-api-key"],
+    value: "openrouter",
+    label: "OpenRouter",
+    hint: "API key (access to Claude, GPT, Gemini, and more)",
+    choices: ["openrouter-api-key"],
   },
   {
     value: "anthropic",
     label: "Anthropic",
-    hint: "setup-token + API key",
-    choices: ["token", "apiKey"],
+    hint: "API key (Claude 3.7 / 3.5)",
+    choices: ["apiKey", "token"],
+  },
+  {
+    value: "google",
+    label: "Google",
+    hint: "Gemini API key (Gemini 3 / 2.5)",
+    choices: ["gemini-api-key", "google-gemini-cli"],
+  },
+  {
+    value: "openai",
+    label: "OpenAI",
+    hint: "API key (GPT-5 / GPT-4o)",
+    choices: ["openai-api-key", "openai-codex"],
+  },
+  {
+    value: "deepseek",
+    label: "DeepSeek",
+    hint: "API key (DeepSeek V3.2)",
+    choices: ["deepseek-api-key"],
   },
   {
     value: "chutes",
@@ -60,12 +78,6 @@ const AUTH_CHOICE_GROUP_DEFS: {
     choices: ["moonshot-api-key", "moonshot-api-key-cn", "kimi-code-api-key"],
   },
   {
-    value: "google",
-    label: "Google",
-    hint: "Gemini API key + OAuth",
-    choices: ["gemini-api-key", "google-gemini-cli"],
-  },
-  {
     value: "xai",
     label: "xAI (Grok)",
     hint: "API key",
@@ -88,12 +100,6 @@ const AUTH_CHOICE_GROUP_DEFS: {
     label: "BytePlus",
     hint: "API key",
     choices: ["byteplus-api-key"],
-  },
-  {
-    value: "openrouter",
-    label: "OpenRouter",
-    hint: "API key",
-    choices: ["openrouter-api-key"],
   },
   {
     value: "kilocode",

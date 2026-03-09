@@ -1,4 +1,6 @@
 import { formatCliCommand } from "../cli/command-format.js";
+import { getBestRecommendedModel } from "../commands/model-picker.js";
+import { resolveDefaultAuthChoice } from "../commands/onboard-helpers.js";
 import type {
   GatewayAuthChoice,
   OnboardMode,
@@ -144,14 +146,23 @@ export async function runOnboardingWizard(
       "Existing config detected",
     );
 
-    const action = await prompter.select({
-      message: "Config handling",
-      options: [
-        { value: "keep", label: "Use existing values" },
-        { value: "modify", label: "Update values" },
-        { value: "reset", label: "Reset" },
-      ],
-    });
+    let action: "keep" | "modify" | "reset" = "keep";
+
+    if (flow === "quickstart" && snapshot.valid) {
+      await prompter.note(
+        "QuickStart is using your existing validated configuration.",
+        "Config handling",
+      );
+    } else {
+      action = await prompter.select({
+        message: "Config handling",
+        options: [
+          { value: "keep", label: "Use existing values" },
+          { value: "modify", label: "Update values" },
+          { value: "reset", label: "Reset" },
+        ],
+      });
+    }
 
     if (action === "reset") {
       const workspaceDefault =
@@ -420,13 +431,24 @@ export async function runOnboardingWizard(
     allowKeychainPrompt: false,
   });
   const authChoiceFromPrompt = opts.authChoice === undefined;
-  const authChoice =
-    opts.authChoice ??
-    (await promptAuthChoiceGrouped({
+  let authChoice = opts.authChoice;
+
+  if (authChoice === undefined && flow === "quickstart") {
+    const detected = resolveDefaultAuthChoice(process.env);
+    if (detected) {
+      authChoice = detected;
+      const label = resolvePreferredProviderForAuthChoice(detected) ?? detected;
+      await prompter.note(`Auto-detected ${label} API key in environment.`, "Authentication");
+    }
+  }
+
+  if (authChoice === undefined) {
+    authChoice = await promptAuthChoiceGrouped({
       prompter,
       store: authStore,
       includeSkip: true,
-    }));
+    });
+  }
 
   if (authChoice === "custom-api-key") {
     const customResult = await promptCustomApiConfig({
@@ -452,19 +474,36 @@ export async function runOnboardingWizard(
   }
 
   if (authChoiceFromPrompt && authChoice !== "custom-api-key") {
-    const modelSelection = await promptDefaultModel({
-      config: nextConfig,
-      prompter,
-      allowKeep: true,
-      ignoreAllowlist: true,
-      includeVllm: true,
-      preferredProvider: resolvePreferredProviderForAuthChoice(authChoice),
-    });
-    if (modelSelection.config) {
-      nextConfig = modelSelection.config;
+    const preferredProvider = resolvePreferredProviderForAuthChoice(authChoice);
+    let model: string | undefined;
+    let config: OpenClawConfig | undefined;
+
+    if (flow === "quickstart" && preferredProvider) {
+      const bestModel = getBestRecommendedModel(preferredProvider);
+      if (bestModel) {
+        model = bestModel;
+        await prompter.note(`Auto-selected recommended model: ${bestModel}`, "Model selection");
+      }
     }
-    if (modelSelection.model) {
-      nextConfig = applyPrimaryModel(nextConfig, modelSelection.model);
+
+    if (!model) {
+      const modelSelection = await promptDefaultModel({
+        config: nextConfig,
+        prompter,
+        allowKeep: true,
+        ignoreAllowlist: true,
+        includeVllm: true,
+        preferredProvider,
+      });
+      config = modelSelection.config;
+      model = modelSelection.model;
+    }
+
+    if (config) {
+      nextConfig = config;
+    }
+    if (model) {
+      nextConfig = applyPrimaryModel(nextConfig, model);
     }
   }
 

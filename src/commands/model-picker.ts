@@ -28,38 +28,40 @@ const HIDDEN_ROUTER_MODELS = new Set(["openrouter/auto"]);
 
 const RECOMMENDED_MODELS: Record<string, string[]> = {
   openrouter: [
-    "anthropic/claude-4.6-sonnet",
-    "anthropic/claude-4.6-opus",
+    "minimax/minimax-m2.5",
     "google/gemini-3-flash-preview",
+    "deepseek/deepseek-v3.2",
+    "anthropic/claude-opus-4.6",
+    "stepfun/step-3.5-flash",
+    "moonshotai/kimi-k2.5",
+    "anthropic/claude-sonnet-4.6",
+    "x-ai/grok-4.1-fast",
+    "arcee-ai/trinity-large-preview",
     "google/gemini-2.5-flash",
+    "anthropic/claude-sonnet-4.5",
+    "openai/gpt-oss-120b",
+    "google/gemini-2.5-flash-lite",
     "openai/gpt-5-nano",
     "openai/gpt-5.2",
-    "deepseek/deepseek-v3.2",
-    "minimax/minimax-m2.5",
-    "x-ai/grok-4.1-fast",
-    "stepfun/step-3.5-flash",
-    "moonshot/kimi-k2.5",
-    "z-ai/glm-5",
-    "openai/gpt-oss-120b",
-    "arcee-ai/trinity-large-preview",
+    "anthropic/claude-haiku-4.5",
+    "deepseek/deepseek-r1-0528",
+    "google/gemini-2.0-flash",
+    "openai/gpt-4o-mini",
   ],
-  anthropic: [
-    "claude-4.6-sonnet-latest",
-    "claude-4.6-opus-latest",
-    "claude-4.5-sonnet",
-    "claude-4.5-haiku",
-  ],
-  google: [
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash",
-  ],
-  openai: ["gpt-5-nano", "gpt-5.2", "gpt-4o", "gpt-4o-mini", "gpt-oss-120b"],
+  anthropic: ["claude-4.6-sonnet", "claude-4.5-sonnet", "claude-3-7-sonnet"],
+  google: ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.0-flash"],
+  openai: ["gpt-5-nano", "gpt-5.2", "gpt-4o-mini"],
   deepseek: ["deepseek-v3.2", "deepseek-chat"],
-  minimax: ["minimax-m2.5"],
+  xai: ["grok-4.1-fast"],
   zai: ["glm-5"],
 };
+
+/**
+ * Returns the best recommended model for a provider (the first one in the list).
+ */
+export function getBestRecommendedModel(provider: string): string | undefined {
+  return RECOMMENDED_MODELS[provider]?.[0];
+}
 
 type PromptDefaultModelParams = {
   config: OpenClawConfig;

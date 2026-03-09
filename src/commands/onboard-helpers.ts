@@ -17,6 +17,7 @@ import { pickPrimaryTailnetIPv4 } from "../infra/tailnet.js";
 import { isWSL } from "../infra/wsl.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import type { RuntimeEnv } from "../runtime.js";
+import { PROVIDER_ENV_VARS } from "../secrets/provider-env-vars.js";
 import { stylePromptTitle } from "../terminal/prompt-style.js";
 import {
   CONFIG_DIR,
@@ -27,7 +28,35 @@ import {
 } from "../utils.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import { VERSION } from "../version.js";
-import type { NodeManagerChoice, OnboardMode, ResetScope } from "./onboard-types.js";
+import type { AuthChoice, NodeManagerChoice, OnboardMode, ResetScope } from "./onboard-types.js";
+
+/**
+ * Detect the best default authentication choice from the environment.
+ * Prioritizes OpenRouter, then Anthropic, Gemini, OpenAI, etc.
+ */
+export function resolveDefaultAuthChoice(
+  env: Record<string, string | undefined> = process.env,
+): AuthChoice | undefined {
+  // Priority order for QuickStart auto-detection.
+  const priority: { provider: string; choice: AuthChoice }[] = [
+    { provider: "openrouter", choice: "openrouter-api-key" },
+    { provider: "anthropic", choice: "apiKey" },
+    { provider: "google", choice: "gemini-api-key" },
+    { provider: "openai", choice: "openai-api-key" },
+    { provider: "deepseek", choice: "deepseek-api-key" },
+    { provider: "mistral", choice: "mistral-api-key" },
+    { provider: "xai", choice: "xai-api-key" },
+  ];
+
+  for (const item of priority) {
+    const vars = PROVIDER_ENV_VARS[item.provider];
+    if (vars?.some((v) => env[v]?.trim())) {
+      return item.choice;
+    }
+  }
+
+  return undefined;
+}
 
 export function guardCancel<T>(value: T | symbol, runtime: RuntimeEnv): T {
   if (isCancel(value)) {

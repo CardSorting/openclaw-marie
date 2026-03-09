@@ -48,10 +48,13 @@ import {
   applyXiaomiProviderConfig,
   applyZaiConfig,
   applyZaiProviderConfig,
+  applyDeepseekConfig,
+  applyDeepseekProviderConfig,
   CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF,
   KILOCODE_DEFAULT_MODEL_REF,
   LITELLM_DEFAULT_MODEL_REF,
   QIANFAN_DEFAULT_MODEL_REF,
+  DEEPSEEK_DEFAULT_MODEL_REF,
   KIMI_CODING_MODEL_REF,
   MOONSHOT_DEFAULT_MODEL_REF,
   MISTRAL_DEFAULT_MODEL_REF,
@@ -64,6 +67,7 @@ import {
   setQianfanApiKey,
   setGeminiApiKey,
   setKilocodeApiKey,
+  setDeepseekApiKey,
   setLitellmApiKey,
   setKimiCodingApiKey,
   setMistralApiKey,
@@ -100,6 +104,7 @@ const API_KEY_TOKEN_PROVIDER_AUTH_CHOICE: Record<string, AuthChoice> = {
   opencode: "opencode-zen",
   kilocode: "kilocode-api-key",
   qianfan: "qianfan-api-key",
+  deepseek: "deepseek-api-key",
 };
 
 const ZAI_AUTH_CHOICE_ENDPOINT: Partial<
@@ -307,6 +312,23 @@ const SIMPLE_API_KEY_PROVIDER_FLOWS: Partial<Record<AuthChoice, SimpleApiKeyProv
     applyProviderConfig: applySyntheticProviderConfig,
     normalize: (value) => String(value ?? "").trim(),
     validate: (value) => (String(value ?? "").trim() ? undefined : "Required"),
+  },
+  "deepseek-api-key": {
+    provider: "deepseek",
+    profileId: "deepseek:default",
+    expectedProviders: ["deepseek"],
+    envLabel: "DEEPSEEK_API_KEY",
+    promptMessage: "Enter DeepSeek API key",
+    setCredential: setDeepseekApiKey,
+    defaultModel: DEEPSEEK_DEFAULT_MODEL_REF,
+    applyDefaultConfig: applyDeepseekConfig,
+    applyProviderConfig: applyDeepseekProviderConfig,
+    noteDefault: DEEPSEEK_DEFAULT_MODEL_REF,
+    noteMessage: [
+      "Get your API key at: https://platform.deepseek.com/api_keys",
+      "DeepSeek V3 is highly recommended for coding tasks.",
+    ].join("\n"),
+    noteTitle: "DeepSeek",
   },
 };
 

@@ -6,6 +6,7 @@ type OnboardProviderAuthOptionKey = keyof Pick<
   | "openaiApiKey"
   | "mistralApiKey"
   | "openrouterApiKey"
+  | "deepseekApiKey"
   | "kilocodeApiKey"
   | "aiGatewayApiKey"
   | "cloudflareAiGatewayApiKey"
@@ -71,6 +72,13 @@ export const ONBOARD_PROVIDER_AUTH_FLAGS: ReadonlyArray<OnboardProviderAuthFlag>
     cliFlag: "--kilocode-api-key",
     cliOption: "--kilocode-api-key <key>",
     description: "Kilo Gateway API key",
+  },
+  {
+    optionKey: "deepseekApiKey",
+    authChoice: "deepseek-api-key",
+    cliFlag: "--deepseek-api-key",
+    cliOption: "--deepseek-api-key <key>",
+    description: "DeepSeek API key",
   },
   {
     optionKey: "aiGatewayApiKey",
