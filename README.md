@@ -31,6 +31,21 @@ The wizard guides you step by step through setting up the gateway, workspace, ch
 Works with npm, pnpm, or bun.
 New install? Start here: [Getting started](https://docs.openclaw.ai/start/getting-started)
 
+## Seamless 0-Touch QuickStart (Recommended)
+
+OpenClaw now features a definitive "0-touch" onboarding flow that can auto-detect your API keys and set up the best trending models automatically.
+
+1. **Set your API Key** (OpenRouter, Anthropic, Gemini, OpenAI, or DeepSeek):
+   ```bash
+   export OPENROUTER_API_KEY=your_key_here
+   ```
+2. **Run QuickStart**:
+   ```bash
+   pnpm openclaw setup --flow quickstart
+   ```
+
+The system will detect your key, select the #1 trending model (e.g., MiniMax M2.5 or DeepSeek V3.2), and take you directly to the TUI interface.
+
 ## Sponsors
 
 | OpenAI                                                            | Vercel                                                            | Blacksmith                                                                   | Convex                                                                |
@@ -56,7 +71,7 @@ Runtime: **Node ≥22**.
 npm install -g openclaw@latest
 # or: pnpm add -g openclaw@latest
 
-openclaw onboard --install-daemon
+openclaw onboard --flow quickstart --install-daemon
 ```
 
 The wizard installs the Gateway daemon (launchd/systemd user service) so it stays running.
@@ -68,7 +83,7 @@ Runtime: **Node ≥22**.
 Full beginner guide (auth, pairing, channels): [Getting started](https://docs.openclaw.ai/start/getting-started)
 
 ```bash
-openclaw onboard --install-daemon
+openclaw onboard --flow quickstart --install-daemon
 
 openclaw gateway --port 18789 --verbose
 
