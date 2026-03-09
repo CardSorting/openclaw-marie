@@ -24,10 +24,16 @@ async function readConfigFileRaw(configPath: string): Promise<{
   }
 }
 
+import { runNativeSetupFlow, type NativeSetupOptions } from "./setup-native.js";
+
 export async function setupCommand(
-  opts?: { workspace?: string },
+  opts?: { workspace?: string; native?: boolean } & NativeSetupOptions,
   runtime: RuntimeEnv = defaultRuntime,
 ) {
+  if (opts?.native) {
+    await runNativeSetupFlow(runtime, opts);
+    return;
+  }
   const desiredWorkspace =
     typeof opts?.workspace === "string" && opts.workspace.trim()
       ? opts.workspace.trim()
