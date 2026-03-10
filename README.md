@@ -56,6 +56,17 @@ Explore the MarieCoder ecosystem including the **macOS Menu Bar App**, **iOS/And
 
 ---
 
+## 🎯 Intent Grounding: The Reality Check
+
+Before a single action is taken, MarieCoder performs a formal **Intent Grounding** phase. This moves the agent from stochastic generation to **Deterministic Execution** by verifying the "Reality" of the request against the physical filesystem and project rules.
+
+- **The Theory**: Grounding is the "Input Filter" for Planning. It ensures the agent understands _what_ the problem is (files, constraints, environment) before deciding _how_ to solve it.
+- **The 6-Pass Protocol**: Our engine leverages environment discovery, semantic rule filtering, security guardrails, and alignment memory to eliminate hallucinations.
+
+### [📘 Read the Full Intent Grounding Strategy](intent-grounding.mdx)
+
+---
+
 ## ✨ Key Features At a Glance
 
 - **🛡️ JoyZoning** — Real-time architectural enforcement and code quality control.
