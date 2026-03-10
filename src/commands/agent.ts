@@ -19,6 +19,8 @@ import { runCliAgent } from "../agents/cli-runner.js";
 import { getCliSessionId, setCliSessionId } from "../agents/cli-session.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { FailoverError } from "../agents/failover-error.js";
+import { IntentGrounder } from "../agents/grounding/IntentGrounder.js";
+import { GroundedSpec } from "../agents/grounding/types.js";
 import { formatAgentInternalEventsForPrompt } from "../agents/internal-events.js";
 import { AGENT_LANE_SUBAGENT } from "../agents/lanes.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
@@ -51,6 +53,7 @@ import { formatCliCommand } from "../cli/command-format.js";
 import { resolveCommandSecretRefsViaGateway } from "../cli/command-secret-gateway.js";
 import { getAgentRuntimeCommandSecretTargetIds } from "../cli/command-secret-targets.js";
 import { type CliDeps, createDefaultDeps } from "../cli/deps.js";
+import { promptQuestion } from "../cli/prompt.js";
 import { loadConfig } from "../config/config.js";
 import {
   mergeSessionEntry,
@@ -175,6 +178,7 @@ function runAgentAttempt(params: {
   sessionStore?: Record<string, SessionEntry>;
   storePath?: string;
   allowRateLimitCooldownProbe?: boolean;
+  groundedSpec?: GroundedSpec;
 }) {
   const effectivePrompt = resolveFallbackRetryPrompt({
     body: params.body,
@@ -329,6 +333,7 @@ function runAgentAttempt(params: {
     onAgentEvent: params.onAgentEvent,
     bootstrapPromptWarningSignaturesSeen,
     bootstrapPromptWarningSignature,
+    groundedSpec: params.groundedSpec,
   });
 }
 
@@ -450,7 +455,68 @@ async function agentCommandInternal(
     ensureBootstrapFiles: !agentCfg?.skipBootstrap,
   });
   const workspaceDir = workspace.dir;
+
   let sessionEntry = resolvedSessionEntry;
+
+  // Resolve parent spec if this is a subagent to inherit rules/context
+  const spawnedBy = opts.spawnedBy ?? sessionEntry?.spawnedBy;
+  let parentSpec: GroundedSpec | undefined;
+  if (spawnedBy && sessionStore && sessionStore[spawnedBy]) {
+    parentSpec = sessionStore[spawnedBy].groundedSpec;
+  }
+
+  // Intent Grounding Phase (Pass 1-5 Hardening)
+  const grounder = new IntentGrounder(cfg);
+  let groundedSpec: GroundedSpec;
+
+  if (sessionEntry?.groundedSpec && sessionEntry.groundedSpec.intent === body) {
+    groundedSpec = sessionEntry.groundedSpec;
+  } else {
+    groundedSpec = await grounder.ground(
+      body,
+      {
+        workspaceDir,
+        agentId: sessionAgentId,
+        sessionKey,
+        history: sessionEntry?.groundedSpec ? [sessionEntry.groundedSpec] : [],
+      },
+      parentSpec,
+    );
+
+    if (groundedSpec.missingInfo && groundedSpec.missingInfo.length > 0 && process.stdout.isTTY) {
+      console.log("\n[Intent Grounding] Clarification Required:");
+      let additionalContext = "";
+      for (const question of groundedSpec.missingInfo) {
+        const answer = await promptQuestion(`? ${question}`);
+        additionalContext += `\n- Clarification for "${question}": ${answer}`;
+      }
+
+      console.log("[Intent Grounding] Re-grounding with provided information...");
+      groundedSpec = await grounder.ground(
+        `${body}\n\n### ADDITIONAL CLARIFICATION\n${additionalContext}`,
+        {
+          workspaceDir,
+          agentId: sessionAgentId,
+          sessionKey,
+        },
+        parentSpec,
+      );
+    }
+
+    if (sessionStore && sessionKey && sessionEntry) {
+      sessionEntry = {
+        ...sessionEntry,
+        groundedSpec,
+        updatedAt: Date.now(),
+      };
+      await persistSessionEntry({
+        sessionStore,
+        sessionKey,
+        storePath,
+        entry: sessionEntry,
+      });
+    }
+  }
   const runId = opts.runId?.trim() || sessionId;
   const acpManager = getAcpSessionManager();
   const acpResolution = sessionKey
@@ -865,12 +931,7 @@ async function agentCommandInternal(
             skillsSnapshot,
             resolvedVerboseLevel,
             agentDir,
-            primaryProvider: provider,
-            sessionStore,
-            storePath,
-            allowRateLimitCooldownProbe: runOptions?.allowRateLimitCooldownProbe,
             onAgentEvent: (evt) => {
-              // Track lifecycle end for fallback emission below.
               if (
                 evt.stream === "lifecycle" &&
                 typeof evt.data?.phase === "string" &&
@@ -878,7 +939,13 @@ async function agentCommandInternal(
               ) {
                 lifecycleEnded = true;
               }
+              opts.onAgentEvent?.(evt);
             },
+            primaryProvider: defaultProvider,
+            sessionStore,
+            storePath,
+            allowRateLimitCooldownProbe: runOptions?.allowRateLimitCooldownProbe,
+            groundedSpec,
           });
         },
       });

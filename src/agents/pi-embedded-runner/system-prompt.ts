@@ -2,6 +2,7 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { MemoryCitationsMode } from "../../config/types.memory.js";
 import type { ResolvedTimeFormat } from "../date-time.js";
+import type { GroundedSpec } from "../grounding/types.js";
 import type { EmbeddedContextFile } from "../pi-embedded-helpers.js";
 import { buildAgentSystemPrompt, type PromptMode } from "../system-prompt.js";
 import { buildToolSummaryMap } from "../tool-summaries.js";
@@ -54,11 +55,13 @@ export function buildEmbeddedSystemPrompt(params: {
   bootstrapTruncationWarningLines?: string[];
   memoryCitationsMode?: MemoryCitationsMode;
   sessionKey?: string;
+  groundedSpec?: GroundedSpec;
 }): string {
   return buildAgentSystemPrompt({
     workspaceDir: params.workspaceDir,
     defaultThinkLevel: params.defaultThinkLevel,
     reasoningLevel: params.reasoningLevel,
+    groundedSpec: params.groundedSpec,
     extraSystemPrompt: params.extraSystemPrompt,
     ownerNumbers: params.ownerNumbers,
     ownerDisplay: params.ownerDisplay,

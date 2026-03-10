@@ -350,6 +350,32 @@ export function resolveDefaultModelForAgent(params: {
   });
 }
 
+export function resolveGroundingModel(params: { cfg: OpenClawConfig; agentId?: string }): ModelRef {
+  const agentConfig = params.agentId ? resolveAgentConfig(params.cfg, params.agentId) : undefined;
+  const groundingRaw = agentConfig?.groundingModel ?? params.cfg.agents?.defaults?.groundingModel;
+
+  if (groundingRaw) {
+    const rawValue = resolveAgentModelPrimaryValue(groundingRaw);
+    if (rawValue) {
+      const aliasIndex = buildModelAliasIndex({
+        cfg: params.cfg,
+        defaultProvider: DEFAULT_PROVIDER,
+      });
+      const resolved = resolveModelRefFromString({
+        raw: rawValue,
+        defaultProvider: DEFAULT_PROVIDER,
+        aliasIndex,
+      });
+      if (resolved) {
+        return resolved.ref;
+      }
+    }
+  }
+
+  // Fallback to default agent model if no grounding model is set
+  return resolveDefaultModelForAgent(params);
+}
+
 export function resolveSubagentConfiguredModelSelection(params: {
   cfg: OpenClawConfig;
   agentId: string;

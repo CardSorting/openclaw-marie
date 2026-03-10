@@ -5,6 +5,7 @@ import type { MemoryCitationsMode } from "../config/types.memory.js";
 import { buildHoneyPotPrompt } from "../security/honey-pots.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
+import type { GroundedSpec } from "./grounding/types.js";
 import { buildAuditSummary as _buildJoyZoningAudit } from "./joy-zoning.policy.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import type { EmbeddedSandboxInfo } from "./pi-embedded-runner/types.js";
@@ -212,6 +213,36 @@ function buildDocsSection(params: { docsPath?: string; isMinimal: boolean; readT
   ];
 }
 
+function buildGroundingSection(groundedSpec?: GroundedSpec) {
+  if (!groundedSpec) {
+    return [];
+  }
+  const rules = groundedSpec.rules ?? [];
+  const environmentMarkers = groundedSpec.environmentMarkers ?? [];
+  const missingInfo = groundedSpec.missingInfo ?? [];
+
+  const lines = ["## Intent Grounding", `Grounded Intent: ${groundedSpec.intent}`, ""];
+
+  if (rules.length > 0) {
+    lines.push("### Observed Rules", ...rules.map((rule) => `- ${rule}`), "");
+  }
+
+  if (environmentMarkers.length > 0) {
+    lines.push("### Environment Context", ...environmentMarkers.map((marker) => `- ${marker}`), "");
+  }
+
+  if (missingInfo.length > 0) {
+    lines.push(
+      "### Missing Information (Clarification needed if blocked)",
+      ...missingInfo.map((info) => `- ${info}`),
+      "",
+    );
+  }
+
+  lines.push(`Confidence Score: ${groundedSpec.confidence}/1.0`, "");
+  return lines;
+}
+
 export function buildAgentSystemPrompt(params: {
   workspaceDir: string;
   defaultThinkLevel?: ThinkLevel;
@@ -269,6 +300,7 @@ export function buildAgentSystemPrompt(params: {
   nudgeDue?: boolean;
   debugMode?: boolean;
   provenance?: ProvenanceRecord;
+  groundedSpec?: GroundedSpec;
 }) {
   const acpEnabled = params.acpEnabled !== false;
   const sandboxedRuntime = params.sandboxInfo?.enabled === true;
@@ -438,6 +470,7 @@ export function buildAgentSystemPrompt(params: {
     "- **Strike System**: Be aware that repeated security violations will trigger an automatic session lockdown.",
     "",
   ];
+  const groundingSection = buildGroundingSection(params.groundedSpec);
   const skillsSection = buildSkillsSection({
     skillsPrompt,
     readToolName,
@@ -463,6 +496,7 @@ export function buildAgentSystemPrompt(params: {
   const lines = [
     "You are a personal assistant running inside OpenClaw.",
     "",
+    ...groundingSection,
     "## Tooling",
     "Tool availability (filtered by policy):",
     "Tool names are case-sensitive. Call tools exactly as listed.",

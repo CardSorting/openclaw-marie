@@ -5,6 +5,7 @@ import type { OpenClawConfig } from "../../../config/config.js";
 import type { enqueueCommand } from "../../../process/command-queue.js";
 import type { InputProvenance } from "../../../sessions/input-provenance.js";
 import type { ExecElevatedDefaults, ExecToolDefaults } from "../../bash-tools.js";
+import type { GroundedSpec } from "../../grounding/types.js";
 import type { BlockReplyPayload } from "../../pi-embedded-payloads.js";
 import type { BlockReplyChunking, ToolResultFormat } from "../../pi-embedded-subscribe.js";
 import type { SkillSnapshot } from "../../skills.js";
@@ -121,4 +122,5 @@ export type RunEmbeddedPiAgentParams = {
    * where rate limits are often model-scoped.
    */
   allowRateLimitCooldownProbe?: boolean;
+  groundedSpec?: GroundedSpec;
 };

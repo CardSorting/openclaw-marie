@@ -128,6 +128,10 @@ export type AgentDefaultsConfig = {
   pdfMaxBytesMb?: number;
   /** Maximum number of PDF pages to process (default: 20). */
   pdfMaxPages?: number;
+  /** Optional grounding model and fallbacks (provider/model). */
+  groundingModel?: AgentModelConfig;
+  /** Optional custom rule files for grounding discovery. */
+  groundingRules?: string[];
   /** Model catalog with optional aliases (full provider/model keys). */
   models?: Record<string, AgentModelEntryConfig>;
   /** Agent working directory (preferred). Used as the default cwd for agent runs. */

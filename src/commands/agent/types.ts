@@ -80,6 +80,10 @@ export type AgentCommandOpts = {
   inputProvenance?: InputProvenance;
   /** Per-call stream param overrides (best-effort). */
   streamParams?: AgentStreamParams;
+  /** Programmatic event listener for agent lifecycle and assistant stream events. */
+  onAgentEvent?: (evt: { stream: string; data?: Record<string, unknown> }) => void;
+  /** Allow a single run attempt even when all auth profiles are in cooldown (rate limit only). */
+  allowRateLimitCooldownProbe?: boolean;
 };
 
 export type AgentCommandIngressOpts = Omit<AgentCommandOpts, "senderIsOwner"> & {

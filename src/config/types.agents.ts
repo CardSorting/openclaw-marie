@@ -65,6 +65,10 @@ export type AgentConfig = {
   workspace?: string;
   agentDir?: string;
   model?: AgentModelConfig;
+  /** Optional per-agent grounding model override. */
+  groundingModel?: AgentModelConfig;
+  /** Optional per-agent custom rule files for grounding discovery. */
+  groundingRules?: string[];
   /** Optional allowlist of skills for this agent (omit = all skills; empty = none). */
   skills?: string[];
   memorySearch?: MemorySearchConfig;
