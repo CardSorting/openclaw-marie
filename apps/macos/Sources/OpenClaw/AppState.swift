@@ -193,6 +193,9 @@ final class AppState {
     /// Tracks whether the Canvas panel is currently visible (not persisted).
     var canvasPanelVisible: Bool = false
 
+    /// Tracks whether the Control Center window is currently visible (not persisted).
+    var controlCenterVisible: Bool = false
+
     var peekabooBridgeEnabled: Bool {
         didSet {
             self.ifNotPreview {

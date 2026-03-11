@@ -20,6 +20,7 @@ struct OpenClawApp: App {
     @State private var isMenuPresented = false
     @State private var isPanelVisible = false
     @State private var tailscaleService = TailscaleService.shared
+    @Environment(\.openWindow) private var openWindow
 
     @MainActor
     private func updateStatusHighlight() {
@@ -88,6 +89,19 @@ struct OpenClawApp: App {
         .onChange(of: self.isMenuPresented) { _, _ in
             self.updateStatusHighlight()
             self.updateHoverHUDSuppression()
+        }
+
+        Window("Control Center", id: "control-center") {
+            ControlCenterView()
+                .environment(self.state)
+        }
+        .defaultSize(width: 800, height: 600)
+        .windowResizability(.contentSize)
+        .onChange(of: self.state.controlCenterVisible) { _, visible in
+            if visible {
+                NSApp.activate(ignoringOtherApps: true)
+                self.openWindow(id: "control-center")
+            }
         }
     }
 

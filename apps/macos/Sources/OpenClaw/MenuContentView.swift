@@ -121,6 +121,11 @@ struct MenuContent: View {
             } label: {
                 Label("Open Chat", systemImage: "bubble.left.and.bubble.right")
             }
+            Button {
+                self.state.controlCenterVisible.toggle()
+            } label: {
+                Label("Open Control Center", systemImage: "macwindow")
+            }
             if self.state.canvasEnabled {
                 Button {
                     Task { @MainActor in
