@@ -344,12 +344,13 @@ const broccolidbPlugin = {
     });
 
     // ========================================================================
-    // Lifecycle Hooks
+    // Lifecycle Hooks (Deep Integration)
     // ========================================================================
-    // Auto-recall: inject relevant memories before agent starts
+
+    // 1. Auto-recall: inject relevant memories before agent starts
     if (cfg.autoRecall) {
-      api.on("before_agent_start", async (event: any) => {
-        const sessionKey = event.sessionKey || "default";
+      api.on("before_agent_start", async (event, ctx) => {
+        const sessionKey = ctx.sessionKey || "default";
         const branch = resolveBranch(sessionKey);
 
         try {
@@ -363,21 +364,145 @@ const broccolidbPlugin = {
 
           if (results.length > 0) {
             const memories = results.map((r) => `[RECALLED] (${r.type}) ${r.content}`).join("\n");
-            const logFn = api.logger.debug;
-            if (typeof logFn === "function") {
-              logFn(
-                `Effective cognitive recall for session ${sessionKey}: ${results.length} nodes injected.`,
-              );
-            }
+            api.logger.debug?.(
+              `[broccolidb] Effective cognitive recall for session ${sessionKey}: ${results.length} nodes injected.`,
+            );
             return { prependContext: `<broccolidb-context>\n${memories}\n</broccolidb-context>` };
           }
         } catch (err) {
           api.logger.warn(
-            `memory-broccolidb: auto-recall failed for session ${sessionKey}: ${String(err)}`,
+            `[broccolidb] auto-recall failed for session ${sessionKey}: ${String(err)}`,
           );
         }
       });
     }
+
+    // 2. Auto-Capture: Extract facts/decisions from successful agent runs
+    if (cfg.autoCapture) {
+      api.on("agent_end", async (event, ctx) => {
+        if (!event.success) return;
+        const messages = (event as any).messages || [];
+        const lastMessage = messages[messages.length - 1];
+        if (!lastMessage || lastMessage.role !== "assistant") return;
+
+        const content = typeof lastMessage.content === "string" ? lastMessage.content : "";
+        if (!content || content.length > (cfg.captureMaxChars || DEFAULT_CAPTURE_MAX_CHARS)) return;
+
+        // Heuristic: only capture if it looks like a fact, decision or important preference
+        const lowercase = content.toLowerCase();
+        const isWorthCapturing =
+          lowercase.includes("remember") ||
+          lowercase.includes("decided") ||
+          lowercase.includes("noted") ||
+          lowercase.includes("fact") ||
+          content.length < 100;
+
+        if (isWorthCapturing) {
+          const sessionKey = ctx.sessionKey || "default";
+          const branch = resolveBranch(sessionKey);
+          await repo.createBranch(branch).catch(() => {});
+
+          try {
+            const id = await agentContext.addKnowledge("auto", "fact", content, {
+              metadata: { source: `auto-capture:${sessionKey}`, sessionId: ctx.sessionId },
+            });
+
+            await repo.commit(
+              branch,
+              { factId: id },
+              "OpenClaw-Auto",
+              `Auto-captured: ${content.slice(0, 30)}...`,
+              {
+                type: "snapshot",
+              },
+            );
+            api.logger.info(`[broccolidb] Auto-captured memory from assistant: ${id}`);
+          } catch (err) {
+            api.logger.warn(`[broccolidb] Auto-capture failed: ${String(err)}`);
+          }
+        }
+      });
+    }
+
+    // 3. Subagent Memory Branching: Isolated reasoning for subtasks
+    api.on("subagent_spawning", async (event, ctx) => {
+      const parentSessionKey = ctx.requesterSessionKey || "default";
+      const childSessionKey = event.childSessionKey;
+      const parentBranch = resolveBranch(parentSessionKey);
+      const childBranch = resolveBranch(childSessionKey);
+
+      try {
+        await repo.createBranch(parentBranch).catch(() => {});
+        // Fork the parent's memory state for the subagent to provide context without pollution
+        await repo.branchHypothesis(parentBranch, childBranch);
+        api.logger.debug?.(
+          `[broccolidb] Branched memory for subagent: ${childBranch} from ${parentBranch}`,
+        );
+      } catch (err) {
+        api.logger.warn(`[broccolidb] Subagent memory branching failed: ${String(err)}`);
+      }
+    });
+
+    // 4. Real-time Audit: Background contradiction detection during generation
+    api.on("llm_output", async (event, ctx) => {
+      const content = event.assistantTexts?.join("\n") || "";
+      if (!content || content.length < 50) return;
+
+      const sessionKey = ctx.sessionKey || "default";
+      // Perform background contradiction check
+      try {
+        const results = await agentContext.searchKnowledge(content, [], 3);
+        for (const memory of results) {
+          const contradictions = await agentContext.detectContradictions(memory.itemId, 1);
+          if (contradictions.length > 0) {
+            api.logger.warn(
+              `[broccolidb] Potential contradiction detected for session ${sessionKey} in assistant output! Content might conflict with known facts.`,
+            );
+          }
+        }
+      } catch (err) {
+        // background audit failures are non-blocking
+      }
+    });
+
+    // 5. Compaction Assistance: Ensure long-term memory is checkpointed before history is lost
+    api.on("before_compaction", async (_event, ctx) => {
+      const sessionKey = ctx.sessionKey || "default";
+      const branch = resolveBranch(sessionKey);
+      try {
+        await repo.commit(
+          branch,
+          { compaction: true },
+          "OpenClaw",
+          `Pre-compaction checkpoint for session ${sessionKey}`,
+          {
+            type: "snapshot",
+          },
+        );
+        api.logger.debug?.(`[broccolidb] Checkpointed memory before compaction for ${sessionKey}`);
+      } catch (err) {
+        api.logger.warn(`[broccolidb] Pre-compaction checkpoint failed: ${String(err)}`);
+      }
+    });
+
+    // 6. Session Lifecycle: Commit state on reset
+    api.on("before_reset", async (_event, ctx) => {
+      const sessionKey = ctx.sessionKey || "default";
+      const branch = resolveBranch(sessionKey);
+      try {
+        await repo.commit(
+          branch,
+          { reset: true },
+          "OpenClaw",
+          "Session reset: checkpointing final state",
+          {
+            type: "snapshot",
+          },
+        );
+      } catch (err) {
+        // ignore
+      }
+    });
 
     // ========================================================================
     // Service
