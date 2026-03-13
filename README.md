@@ -70,6 +70,7 @@ Before a single action is taken, MarieCoder performs a formal **Intent Grounding
 ## ✨ Key Features At a Glance
 
 - **🛡️ JoyZoning** — Real-time architectural enforcement and code quality control.
+- **🥦 BroccoliDB** — Versioned reasoning and long-term memory with Merkle-tree persistence and automated reasoning audits.
 - **🧬 Skill Evolution** — Adaptive learning that optimizes performance over time.
 - **⚡ DBPooling** — High-performance, thread-safe SQLite connection management.
 - **🔌 Multi-Channel Interface** — Connect via WhatsApp, Telegram, Slack, Discord, Signal, iMessage, and more.

@@ -31,6 +31,16 @@ Experience industrial-grade reliability with the `SqliteConnectionPool`:
 - **Write-Mutex Serialization**: Guarantees data integrity during high-concurrency operations.
 - **Atomic Persistence**: Ensures your agent's state and memory are never corrupted, even during hard restarts.
 
+### 🥦 BroccoliDB (Versioned Reasoning & Memory)
+
+OpenClaw's elite memory engine, BroccoliDB, introduces Merkle-tree persistence and versioned reasoning.
+
+- **Merkle-Tree Branching**: Isolated, version-controlled context for sessions, enabling agents to explore branching hypotheses and isolated "what-if" scenarios.
+- **Unified Knowledge Graph**: Semantic recall and graph traversal ensure deep, contextually relevant memory retrieval across long-running projects.
+- **Audit & Reasoning Analysis**: Built-in `AuditService` proactively detects logical contradictions and enforces multi-turn alignment.
+- **Broccoli Doctor**: Industrial-grade `DoctorService` monitors Merkle health, database integrity, and concurrency performance.
+- **Auto-Recall & Swarm Claims**: Proactively injects historical context while using "swarm claims" to prevent file-editing conflicts in multi-agent environments.
+
 ---
 
 ## 🛠️ Advanced Features
