@@ -1,4 +1,5 @@
 export { MemoryIndexManager } from "./manager.js";
+export { BroccoliDBMemoryManager } from "./broccolidb-manager.js";
 export type {
   MemoryEmbeddingProbeResult,
   MemorySearchManager,

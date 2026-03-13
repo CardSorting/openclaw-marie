@@ -42,6 +42,7 @@ describe("redactSensitiveStatusSummary", () => {
           },
         ],
       },
+      joyZoning: null,
     };
 
     const redacted = redactSensitiveStatusSummary(input);

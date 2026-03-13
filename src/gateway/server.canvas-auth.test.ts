@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
 import { A2UI_PATH, CANVAS_HOST_PATH, CANVAS_WS_PATH } from "../canvas-host/a2ui.js";
 import type { CanvasHostHandler } from "../canvas-host/server.js";
-import { createAuthRateLimiter } from "./auth-rate-limit.js";
+import { createAuthRateLimiter, type AuthRateLimiter } from "./auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth.js";
 import { CANVAS_CAPABILITY_PATH_PREFIX } from "./canvas-capability.js";
 import { attachGatewayUpgradeHandler, createGatewayHttpServer } from "./server-http.js";
@@ -116,7 +116,7 @@ const allowCanvasHostHttp: CanvasHostHandler["handleHttpRequest"] = async (req, 
 async function withCanvasGatewayHarness(params: {
   resolvedAuth: ResolvedGatewayAuth;
   listenHost?: string;
-  rateLimiter?: ReturnType<typeof createAuthRateLimiter>;
+  rateLimiter?: AuthRateLimiter;
   handleHttpRequest: CanvasHostHandler["handleHttpRequest"];
   run: (ctx: {
     listener: Awaited<ReturnType<typeof listen>>;
@@ -352,7 +352,7 @@ describe("gateway canvas host auth", () => {
 
   test("returns 429 for repeated failed canvas auth attempts (HTTP + WS upgrade)", async () => {
     await withLoopbackTrustedProxy(async () => {
-      const rateLimiter = createAuthRateLimiter({
+      const rateLimiter = await createAuthRateLimiter({
         maxAttempts: 1,
         windowMs: 60_000,
         lockoutMs: 60_000,

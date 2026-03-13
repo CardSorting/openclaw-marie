@@ -15,7 +15,7 @@ import type {
 } from "./types.gateway.js";
 import type { HooksConfig } from "./types.hooks.js";
 import type { JoyZoningConfig } from "./types.joy-zoning.js";
-import type { MemoryConfig } from "./types.memory.js";
+import type { BroccoliDBConfig, MemoryConfig } from "./types.memory.js";
 import type {
   AudioConfig,
   BroadcastConfig,
@@ -115,6 +115,7 @@ export type OpenClawConfig = {
   talk?: TalkConfig;
   gateway?: GatewayConfig;
   memory?: MemoryConfig;
+  broccolidb?: BroccoliDBConfig;
   /** Joy-Zoning architectural enforcement configuration. */
   joyZoning?: JoyZoningConfig;
 };

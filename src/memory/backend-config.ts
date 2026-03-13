@@ -4,6 +4,7 @@ import { parseDurationMs } from "../cli/parse-duration.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { SessionSendPolicyConfig } from "../config/types.base.js";
 import type {
+  BroccoliDBConfig,
   MemoryBackend,
   MemoryCitationsMode,
   MemoryQmdConfig,
@@ -18,6 +19,7 @@ export type ResolvedMemoryBackendConfig = {
   backend: MemoryBackend;
   citations: MemoryCitationsMode;
   qmd?: ResolvedQmdConfig;
+  broccolidb?: BroccoliDBConfig;
 };
 
 export type ResolvedQmdCollection = {
@@ -300,6 +302,16 @@ export function resolveMemoryBackendConfig(params: {
 }): ResolvedMemoryBackendConfig {
   const backend = params.cfg.memory?.backend ?? DEFAULT_BACKEND;
   const citations = params.cfg.memory?.citations ?? DEFAULT_CITATIONS;
+
+  if (backend === "broccolidb") {
+    const broccolidb = params.cfg.memory?.broccolidb ?? params.cfg.broccolidb;
+    return {
+      backend: "broccolidb",
+      citations,
+      broccolidb,
+    };
+  }
+
   if (backend !== "qmd") {
     return { backend: "builtin", citations };
   }

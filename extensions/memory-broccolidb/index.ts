@@ -8,14 +8,12 @@
 
 import { randomUUID } from "node:crypto";
 import { Type } from "@sinclair/typebox";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/memory-broccolidb";
 import {
-  broccolidbConfigSchema,
-  vectorDimsForModel,
-  DEFAULT_CAPTURE_MAX_CHARS,
   MEMORY_CATEGORIES,
   type MemoryCategory,
-} from "./config.js";
+  type OpenClawPluginApi,
+} from "openclaw/plugin-sdk/memory-broccolidb";
+import { broccolidbConfigSchema, vectorDimsForModel, DEFAULT_CAPTURE_MAX_CHARS } from "./config.js";
 import { AgentContext } from "./src/core/agent-context.js";
 import { Connection } from "./src/core/connection.js";
 import { AiService } from "./src/core/embedding.js";

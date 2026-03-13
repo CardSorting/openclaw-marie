@@ -48,12 +48,12 @@ function createResponse(): {
   return { res, end, setHeader };
 }
 
-function createHandler(params?: {
+async function createHandler(params?: {
   dispatchWakeHook?: HooksHandlerDeps["dispatchWakeHook"];
   dispatchAgentHook?: HooksHandlerDeps["dispatchAgentHook"];
   bindHost?: string;
 }) {
-  return createHooksRequestHandler({
+  return await createHooksRequestHandler({
     getHooksConfig: () => createHooksConfig(),
     bindHost: params?.bindHost ?? "127.0.0.1",
     port: 18789,
@@ -82,7 +82,7 @@ describe("createHooksRequestHandler timeout status mapping", () => {
     readJsonBodyMock.mockResolvedValue({ ok: false, error: "request body timeout" });
     const dispatchWakeHook = vi.fn();
     const dispatchAgentHook = vi.fn(() => "run-1");
-    const handler = createHandler({ dispatchWakeHook, dispatchAgentHook });
+    const handler = await createHandler({ dispatchWakeHook, dispatchAgentHook });
     const req = createRequest();
     const { res, end } = createResponse();
 
@@ -96,7 +96,7 @@ describe("createHooksRequestHandler timeout status mapping", () => {
   });
 
   test("shares hook auth rate-limit bucket across ipv4 and ipv4-mapped ipv6 forms", async () => {
-    const handler = createHandler();
+    const handler = await createHandler();
 
     for (let i = 0; i < 20; i++) {
       const req = createRequest({
@@ -124,7 +124,7 @@ describe("createHooksRequestHandler timeout status mapping", () => {
   test.each(["0.0.0.0", "::"])(
     "does not throw when bindHost=%s while parsing non-hook request URL",
     async (bindHost) => {
-      const handler = createHandler({ bindHost });
+      const handler = await createHandler({ bindHost });
       const req = createRequest({ url: "/" });
       const { res, end } = createResponse();
 

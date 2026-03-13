@@ -156,8 +156,8 @@ export function createCanonicalizedChannelPluginHandler() {
   });
 }
 
-export function createHooksHandler(bindHost: string) {
-  return createHooksRequestHandler({
+export async function createHooksHandler(bindHost: string) {
+  return await createHooksRequestHandler({
     getHooksConfig: () => createHooksConfig(),
     bindHost,
     port: 18789,

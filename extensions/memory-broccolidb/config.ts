@@ -1,23 +1,11 @@
 import fs from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-
-export type BroccoliDBConfig = {
-  embedding: {
-    provider: "openai";
-    model: string;
-    apiKey: string;
-    baseUrl?: string;
-    dimensions?: number;
-  };
-  dbPath?: string;
-  autoCapture?: boolean;
-  autoRecall?: boolean;
-  captureMaxChars?: number;
-};
-
-export const MEMORY_CATEGORIES = ["preference", "fact", "decision", "entity", "other"] as const;
-export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
+import {
+  MEMORY_CATEGORIES,
+  type BroccoliDBConfig,
+  type MemoryCategory,
+} from "openclaw/plugin-sdk/memory-broccolidb";
 
 const DEFAULT_MODEL = "text-embedding-3-small";
 export const DEFAULT_CAPTURE_MAX_CHARS = 500;

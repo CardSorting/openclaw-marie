@@ -16,7 +16,7 @@ import { createHooksRequestHandler } from "../server-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
-export function createGatewayHooksRequestHandler(params: {
+export async function createGatewayHooksRequestHandler(params: {
   deps: CliDeps;
   getHooksConfig: () => HooksConfigResolved | null;
   bindHost: string;
@@ -102,7 +102,7 @@ export function createGatewayHooksRequestHandler(params: {
     return runId;
   };
 
-  return createHooksRequestHandler({
+  return await createHooksRequestHandler({
     getHooksConfig,
     bindHost,
     port,

@@ -1,6 +1,6 @@
 import type { SessionSendPolicyConfig } from "./types.base.js";
 
-export type MemoryBackend = "builtin" | "qmd";
+export type MemoryBackend = "builtin" | "qmd" | "broccolidb";
 export type MemoryCitationsMode = "auto" | "on" | "off";
 export type MemoryQmdSearchMode = "query" | "search" | "vsearch";
 
@@ -8,7 +8,25 @@ export type MemoryConfig = {
   backend?: MemoryBackend;
   citations?: MemoryCitationsMode;
   qmd?: MemoryQmdConfig;
+  broccolidb?: BroccoliDBConfig;
 };
+
+export type BroccoliDBConfig = {
+  embedding: {
+    provider: "openai";
+    model: string;
+    apiKey: string;
+    baseUrl?: string;
+    dimensions?: number;
+  };
+  dbPath?: string;
+  autoCapture?: boolean;
+  autoRecall?: boolean;
+  captureMaxChars?: number;
+};
+
+export const MEMORY_CATEGORIES = ["preference", "fact", "decision", "entity", "other"] as const;
+export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
 
 export type MemoryQmdConfig = {
   command?: string;

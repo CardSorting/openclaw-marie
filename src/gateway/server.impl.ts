@@ -136,13 +136,15 @@ const canvasRuntime = runtimeForLogger(logCanvas);
 
 type AuthRateLimitConfig = Parameters<typeof createAuthRateLimiter>[0];
 
-function createGatewayAuthRateLimiters(rateLimitConfig: AuthRateLimitConfig | undefined): {
+async function createGatewayAuthRateLimiters(
+  rateLimitConfig: AuthRateLimitConfig | undefined,
+): Promise<{
   rateLimiter?: AuthRateLimiter;
   browserRateLimiter: AuthRateLimiter;
-} {
-  const rateLimiter = rateLimitConfig ? createAuthRateLimiter(rateLimitConfig) : undefined;
+}> {
+  const rateLimiter = rateLimitConfig ? await createAuthRateLimiter(rateLimitConfig) : undefined;
   // Browser-origin WS auth attempts always use loopback-non-exempt throttling.
-  const browserRateLimiter = createAuthRateLimiter({
+  const browserRateLimiter = await createAuthRateLimiter({
     ...rateLimitConfig,
     exemptLoopback: false,
   });
@@ -502,7 +504,7 @@ export async function startGatewayServer(
   // Create auth rate limiters used by connect/auth flows.
   const rateLimitConfig = cfgAtStart.gateway?.auth?.rateLimit;
   const { rateLimiter: authRateLimiter, browserRateLimiter: browserAuthRateLimiter } =
-    createGatewayAuthRateLimiters(rateLimitConfig);
+    await createGatewayAuthRateLimiters(rateLimitConfig);
 
   let controlUiRootState: ControlUiRootState | undefined;
   if (controlUiRootOverride) {

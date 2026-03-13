@@ -34,10 +34,10 @@ export async function noteMemorySearchHealth(
     return;
   }
 
-  // QMD backend handles embeddings internally (e.g. embeddinggemma) — no
-  // separate embedding provider is needed. Skip the provider check entirely.
+  // QMD and BroccoliDB backends handle embeddings internally (e.g. embeddinggemma or OpenAI embeddings) —
+  // no separate embedding provider is needed. Skip the provider check entirely.
   const backendConfig = resolveMemoryBackendConfig({ cfg, agentId });
-  if (backendConfig.backend === "qmd") {
+  if (backendConfig.backend === "qmd" || backendConfig.backend === "broccolidb") {
     return;
   }
 

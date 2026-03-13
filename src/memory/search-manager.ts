@@ -1,4 +1,5 @@
 import type { OpenClawConfig } from "../config/config.js";
+import type { BroccoliDBConfig } from "../config/types.memory.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { ResolvedQmdConfig } from "./backend-config.js";
 import { resolveMemoryBackendConfig } from "./backend-config.js";
@@ -10,6 +11,7 @@ import type {
 
 const log = createSubsystemLogger("memory");
 const QMD_MANAGER_CACHE = new Map<string, MemorySearchManager>();
+const BROCCOLIDB_MANAGER_CACHE = new Map<string, MemorySearchManager>();
 let managerRuntimePromise: Promise<typeof import("./manager-runtime.js")> | null = null;
 
 function loadManagerRuntime() {
@@ -21,13 +23,42 @@ export type MemorySearchManagerResult = {
   manager: MemorySearchManager | null;
   error?: string;
 };
-
 export async function getMemorySearchManager(params: {
   cfg: OpenClawConfig;
   agentId: string;
   purpose?: "default" | "status";
 }): Promise<MemorySearchManagerResult> {
   const resolved = resolveMemoryBackendConfig(params);
+
+  if (resolved.backend === "broccolidb" && resolved.broccolidb) {
+    const statusOnly = params.purpose === "status";
+    let cacheKey: string | undefined;
+    if (!statusOnly) {
+      cacheKey = buildBroccoliDBCacheKey(params.agentId, resolved.broccolidb);
+      const cached = BROCCOLIDB_MANAGER_CACHE.get(cacheKey);
+      if (cached) {
+        return { manager: cached };
+      }
+    }
+    try {
+      const { BroccoliDBMemoryManager } = await import("./broccolidb-manager.js");
+      const manager = await BroccoliDBMemoryManager.create({
+        cfg: params.cfg,
+        agentId: params.agentId,
+        resolved,
+      });
+      if (manager) {
+        if (!statusOnly && cacheKey) {
+          BROCCOLIDB_MANAGER_CACHE.set(cacheKey, manager);
+        }
+        return { manager };
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn(`broccolidb memory unavailable; falling back to builtin: ${message}`);
+    }
+  }
+
   if (resolved.backend === "qmd" && resolved.qmd) {
     const statusOnly = params.purpose === "status";
     let cacheKey: string | undefined;
@@ -227,6 +258,10 @@ class FallbackMemoryManager implements MemorySearchManager {
     this.cacheEvicted = true;
     this.onClose?.();
   }
+}
+
+function buildBroccoliDBCacheKey(agentId: string, config: BroccoliDBConfig): string {
+  return `${agentId}:${JSON.stringify(config)}`;
 }
 
 function buildQmdCacheKey(agentId: string, config: ResolvedQmdConfig): string {

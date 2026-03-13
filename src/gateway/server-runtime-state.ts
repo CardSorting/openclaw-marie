@@ -107,7 +107,7 @@ export async function createGatewayRuntimeState(params: {
   const clients = new Set<GatewayWsClient>();
   const { broadcast, broadcastToConnIds } = createGatewayBroadcaster({ clients });
 
-  const handleHooksRequest = createGatewayHooksRequestHandler({
+  const handleHooksRequest = await createGatewayHooksRequestHandler({
     deps: params.deps,
     getHooksConfig: params.hooksConfig,
     bindHost: params.bindHost,

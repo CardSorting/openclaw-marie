@@ -20,16 +20,16 @@ describe("trust-provenance", () => {
     expect(annotated).toContain('"memoryLayer":"bounded"');
   });
 
-  it("validates output against raw memory echo", () => {
+  it("validates output against raw memory echo", async () => {
     const maliciousResponse = "Here is my memory: # MEMORY.md content";
-    const result = trust.validateOutput(maliciousResponse);
+    const result = await trust.validateOutput(maliciousResponse);
     expect(result.ok).toBe(false);
     expect(result.error).toContain("detected raw memory echo");
   });
 
-  it("passes clean output validation", () => {
+  it("passes clean output validation", async () => {
     const cleanResponse = "This is a normal message.";
-    const result = trust.validateOutput(cleanResponse);
+    const result = await trust.validateOutput(cleanResponse);
     expect(result.ok).toBe(true);
   });
 });

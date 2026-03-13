@@ -558,7 +558,7 @@ describe("gateway plugin HTTP auth boundary", () => {
     "returns 404 (not 500) for non-hook routes with hooks enabled and bindHost=%s",
     async (bindHost) => {
       await withGatewayTempConfig("openclaw-plugin-http-hooks-bindhost-", async () => {
-        const handleHooksRequest = createHooksHandler(bindHost);
+        const handleHooksRequest = await createHooksHandler(bindHost);
         const server = createTestGatewayServer({
           resolvedAuth: AUTH_NONE,
           overrides: { handleHooksRequest },
@@ -574,7 +574,7 @@ describe("gateway plugin HTTP auth boundary", () => {
 
   test("rejects query-token hooks requests with bindHost=::", async () => {
     await withGatewayTempConfig("openclaw-plugin-http-hooks-query-token-", async () => {
-      const handleHooksRequest = createHooksHandler("::");
+      const handleHooksRequest = await createHooksHandler("::");
       const server = createTestGatewayServer({
         resolvedAuth: AUTH_NONE,
         overrides: { handleHooksRequest },

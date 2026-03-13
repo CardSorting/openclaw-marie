@@ -284,16 +284,16 @@ function buildPluginRequestStages(params: {
   ];
 }
 
-export function createHooksRequestHandler(
+export async function createHooksRequestHandler(
   opts: {
     getHooksConfig: () => HooksConfigResolved | null;
     bindHost: string;
     port: number;
     logHooks: SubsystemLogger;
   } & HookDispatchers,
-): HooksRequestHandler {
+): Promise<HooksRequestHandler> {
   const { getHooksConfig, logHooks, dispatchAgentHook, dispatchWakeHook } = opts;
-  const hookAuthLimiter = createAuthRateLimiter({
+  const hookAuthLimiter = await createAuthRateLimiter({
     maxAttempts: HOOK_AUTH_FAILURE_LIMIT,
     windowMs: HOOK_AUTH_FAILURE_WINDOW_MS,
     lockoutMs: HOOK_AUTH_FAILURE_WINDOW_MS,
@@ -341,13 +341,13 @@ export function createHooksRequestHandler(
         logHooks.warn(`hook auth throttled for ${clientKey}; retry-after=${retryAfter}s`);
         return true;
       }
-      hookAuthLimiter.recordFailure(clientKey, AUTH_RATE_LIMIT_SCOPE_HOOK_AUTH);
+      await hookAuthLimiter.recordFailure(clientKey, AUTH_RATE_LIMIT_SCOPE_HOOK_AUTH);
       res.statusCode = 401;
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.end("Unauthorized");
       return true;
     }
-    hookAuthLimiter.reset(clientKey, AUTH_RATE_LIMIT_SCOPE_HOOK_AUTH);
+    await hookAuthLimiter.reset(clientKey, AUTH_RATE_LIMIT_SCOPE_HOOK_AUTH);
 
     if (req.method !== "POST") {
       res.statusCode = 405;
