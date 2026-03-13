@@ -67,7 +67,6 @@ const requiredSubpathEntries = [
   "matrix",
   "mattermost",
   "memory-core",
-  "memory-lancedb",
   "memory-broccolidb",
   "minimax-portal-auth",
   "nextcloud-talk",

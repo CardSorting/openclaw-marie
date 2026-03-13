@@ -140,10 +140,6 @@
       "types": "./dist/plugin-sdk/memory-core.d.ts",
       "default": "./dist/plugin-sdk/memory-core.js"
     },
-    "./plugin-sdk/memory-lancedb": {
-      "types": "./dist/plugin-sdk/memory-lancedb.d.ts",
-      "default": "./dist/plugin-sdk/memory-lancedb.js"
-    },
     "./plugin-sdk/memory-broccolidb": {
       "types": "./dist/plugin-sdk/memory-broccolidb.d.ts",
       "default": "./dist/plugin-sdk/memory-broccolidb.js"
