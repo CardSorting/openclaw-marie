@@ -132,6 +132,11 @@ const pluginSdkScopedAliasEntries = [
     distFile: "memory-lancedb.js",
   },
   {
+    subpath: "memory-broccolidb",
+    srcFile: "memory-broccolidb.ts",
+    distFile: "memory-broccolidb.js",
+  },
+  {
     subpath: "minimax-portal-auth",
     srcFile: "minimax-portal-auth.ts",
     distFile: "minimax-portal-auth.js",

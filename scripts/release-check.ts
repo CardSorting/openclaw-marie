@@ -67,6 +67,8 @@ const requiredPathGroups = [
   "dist/plugin-sdk/memory-core.d.ts",
   "dist/plugin-sdk/memory-lancedb.js",
   "dist/plugin-sdk/memory-lancedb.d.ts",
+  "dist/plugin-sdk/memory-broccolidb.js",
+  "dist/plugin-sdk/memory-broccolidb.d.ts",
   "dist/plugin-sdk/minimax-portal-auth.js",
   "dist/plugin-sdk/minimax-portal-auth.d.ts",
   "dist/plugin-sdk/nextcloud-talk.js",

@@ -8,7 +8,7 @@
 
 import { randomUUID } from "node:crypto";
 import { Type } from "@sinclair/typebox";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk/memory-broccolidb";
 import {
   broccolidbConfigSchema,
   vectorDimsForModel,

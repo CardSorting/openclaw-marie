@@ -40,6 +40,7 @@
     "src/plugin-sdk/mattermost.ts",
     "src/plugin-sdk/memory-core.ts",
     "src/plugin-sdk/memory-lancedb.ts",
+    "src/plugin-sdk/memory-broccolidb.ts",
     "src/plugin-sdk/minimax-portal-auth.ts",
     "src/plugin-sdk/nextcloud-talk.ts",
     "src/plugin-sdk/nostr.ts",
