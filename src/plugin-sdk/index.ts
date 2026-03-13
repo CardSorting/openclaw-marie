@@ -351,6 +351,7 @@ export type {
   PersistentDedupeOptions,
 } from "./persistent-dedupe.js";
 export { formatErrorMessage } from "../infra/errors.js";
+export { retryAsync, type RetryInfo, type RetryOptions } from "../infra/retry.js";
 export {
   formatUtcTimestamp,
   formatZonedTimestamp,

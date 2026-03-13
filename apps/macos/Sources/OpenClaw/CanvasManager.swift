@@ -3,8 +3,10 @@ import Foundation
 import OpenClawIPC
 import OpenClawKit
 import OSLog
+import Observation
 
 @MainActor
+@Observable
 final class CanvasManager {
     static let shared = CanvasManager()
 
@@ -12,7 +14,7 @@ final class CanvasManager {
 
     private var panelController: CanvasWindowController?
     private var panelSessionKey: String?
-    private var lastAutoA2UIUrl: String?
+    public private(set) var currentUrl: String?
     private var gatewayWatchTask: Task<Void, Never>?
 
     private init() {
@@ -62,6 +64,7 @@ final class CanvasManager {
             // Existing session: only navigate when an explicit target was provided.
             if let normalizedTarget {
                 controller.load(target: normalizedTarget)
+                self.currentUrl = normalizedTarget
                 return self.makeShowResult(
                     directory: controller.directoryPath,
                     target: target,
@@ -101,6 +104,7 @@ final class CanvasManager {
         let effectiveTarget = normalizedTarget ?? "/"
         Self.logger.debug("showDetailed showCanvas effectiveTarget=\(effectiveTarget, privacy: .public)")
         controller.showCanvas(path: effectiveTarget)
+        self.currentUrl = effectiveTarget
         Self.logger.debug("showDetailed showCanvas done")
         if normalizedTarget == nil {
             self.maybeAutoNavigateToA2UIAsync(controller: controller)
@@ -191,7 +195,7 @@ final class CanvasManager {
         }
         Self.logger.debug("canvas auto-nav -> \(a2uiUrl, privacy: .public)")
         controller.load(target: a2uiUrl)
-        self.lastAutoA2UIUrl = a2uiUrl
+        self.currentUrl = a2uiUrl
     }
 
     private func resolveA2UIHostUrl() async -> String? {
