@@ -4,6 +4,10 @@
   "private": true,
   "description": "OpenClaw BroccoliDB-backed versioned reasoning and memory plugin",
   "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "check": "oxlint --type-aware"
+  },
   "dependencies": {
     "@google/genai": "^1.44.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
@@ -18,7 +22,9 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11"
+    "@types/better-sqlite3": "^7.6.11",
+    "openclaw": "workspace:*",
+    "typescript": "^5.9.3"
   },
   "openclaw": {
     "extensions": [

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "openclaw/plugin-sdk": ["../../src/plugin-sdk/index.ts"],
+      "openclaw/plugin-sdk/*": ["../../src/plugin-sdk/*.ts"],
+      "openclaw/plugin-sdk/account-id": ["../../src/plugin-sdk/account-id.ts"]
+    }
+  },
+  "include": ["**/*"],
+  "exclude": ["node_modules", "dist", "src/verify_filetree.ts"]
+}
