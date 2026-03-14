@@ -67,9 +67,22 @@ Before a single action is taken, MarieCoder performs a formal **Intent Grounding
 
 ---
 
+## 🤖 Existential Autonomy: The "No-Human" Pass
+
+MarieCoder version `2026.3.3` introduces **Existential Autonomy**—a radical hardening of the agentic substrate that eliminates the need for human oversight during complex remediation and maintenance cycles.
+
+- **Systemic Governance**: Autonomous load balancing monitor that throttles subagent spawning and memory compaction based on real-time CPU/Memory utilization.
+- **Critique-Driven Remediation**: Failed attempts generate "Critique Snapshots" (Lessons Learned) which are injected into subsequent retries, preventing regression and enabling self-correction without model escalation.
+- **Health-Adaptive Steering**: A global systemic health score (Success Rate vs. Latency) that dynamically tightens or relaxes architectural guardrails like JoyZoning based on current environment stability.
+- **Autonomous Rollbacks**: Immediate, zero-touch restoration of known-good states in the event of build breakage or remediation failure.
+- **Systemic Architect Subagents**: Specialized, high-reasoning subagents with full authority to refactor dependencies and resolve architectural deadlocks.
+
+---
+
 ## ✨ Key Features At a Glance
 
 - **🛡️ JoyZoning** — Real-time architectural enforcement and code quality control.
+- **🤖 Existential Autonomy** — Zero-touch, self-regulating governance with critique-driven remediation and health steering.
 - **🥦 BroccoliDB** — Versioned reasoning and long-term memory with Merkle-tree persistence and automated reasoning audits.
 - **🧬 Skill Evolution** — Adaptive learning that optimizes performance over time.
 - **⚡ DBPooling** — High-performance, thread-safe SQLite connection management.
