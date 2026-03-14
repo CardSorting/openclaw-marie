@@ -89,6 +89,14 @@ Details:
 For the full compaction lifecycle, see
 [Session management + compaction](/reference/session-management-compaction).
 
+## Existential Autonomy & Memory Governance
+
+In version `2026.3.3`, MarieCoder introduces **Existential Autonomy** for memory governance. This ensures that memory maintenance never compromises active remediation cycles.
+
+- **Autonomous Compaction Throttling**: The memory compactor (`marie-memory-compactor.ts`) now queries systemic load. If the host is under heavy pressure (CPU > 85%), compaction is deferred to preserve resources for the agent's critical reasoning path.
+- **Merkle-Branch Isolation**: Autonomous remediations are staged in isolated Merkle-tree branches via BroccoliDB.
+- **State-Aware Rollbacks**: If a remediation fails health checks, the system performs an atomic rollback of the memory state and files to the last known stable Merkle root preserved in the `StrategicEvolutionStore`.
+
 ## Vector memory search
 
 OpenClaw can build a small vector index over `MEMORY.md` and `memory/*.md` so

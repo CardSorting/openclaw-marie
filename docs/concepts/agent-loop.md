@@ -124,6 +124,14 @@ See [Plugins](/tools/plugin#plugin-hooks) for the hook API and registration deta
 - On retry, in-memory buffers and tool summaries are reset to avoid duplicate output.
 - See [Compaction](/concepts/compaction) for the compaction pipeline.
 
+## Existential Autonomy Lifecycle
+
+In addition to standard flows, the agent loop now incorporates **Existential Autonomy** checks:
+
+- **Pre-execution Governance**: `FluidPolicyEngine` checks systemic load before spawning audit subagents or starting intense remediation runs.
+- **Critique-Driven Remediation**: If an agent run results in a build failure or regression, a `Critique Snapshot` is generated and injected into the next serialized run in that session.
+- **Autonomous Rollback**: If a run fails validation (detected in `agent_end` or via diagnostic events), the system automatically reverts file changes to the last known stable state before closing the loop.
+
 ## Event streams (today)
 
 - `lifecycle`: emitted by `subscribeEmbeddedPiSession` (and as a fallback by `agentCommand`)

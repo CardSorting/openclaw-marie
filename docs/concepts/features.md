@@ -26,6 +26,9 @@ title: "Features"
   <Card title="Mobile nodes" icon="smartphone">
     iOS and Android nodes with pairing, voice/chat, and rich device commands.
   </Card>
+  <Card title="Autonomy" icon="microchip">
+    Existential Autonomy: Zero-touch systemic governance and self-regulating substrate.
+  </Card>
 </Columns>
 
 ## Full list

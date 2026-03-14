@@ -28,9 +28,12 @@ Joy-Zoning tracks its state dynamically. Instead of relying on a static "DO NOT 
 
 Joy-Zoning isn't just punitive. By actively hooking into the tool execution lifecycle, it automatically clears strikes from a file the moment an agent successfully refactors it to comply with the zoning policy. This creates a natural, rewarding feedback loop for the LLM.
 
-### 5. Configurable Strictness
+### 6. Health-Adaptive Steering (Existential Autonomy)
 
-It ships with configurable enforcement modes (`advisory`, `standard`, `strict`). You can slowly introduce Joy-Zoning to legacy projects in `advisory` mode (getting logs and metrics without blocking the agent), and later escalate to `strict` mode to mandate absolute compliance on hardened greenfield projects.
+Joy-Zoning is a core input and output for Marie's **Existential Autonomy** loop.
+
+- **Dynamic Tightening**: If the global systemic health score drops (due to regressions or high entropy), `EvolutionaryPilot` autonomously escalates Joy-Zoning from `advisory` to `strict`.
+- **Entropy Reconciliation**: When Joy-Zoning patterns are violated at scale, the system triggers an autonomous "Sync & Audit" pass to reconcile the codebase before allowing further mutations.
 
 ## How it Works Under the Hood
 
