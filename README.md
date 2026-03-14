@@ -82,7 +82,7 @@ MarieCoder version `2026.3.3` introduces **Existential Autonomy**—a radical ha
 ## ✨ Key Features At a Glance
 
 - **🛡️ JoyZoning** — Real-time architectural enforcement and code quality control.
-- **🤖 Existential Autonomy** — Zero-touch, self-regulating governance with critique-driven remediation and health steering.
+- **🤖 Existential Autonomy** — Zero-touch, self-regulating governance with critique-driven remediation and health steering. **[📘 Deep Dive](docs/design/existential-autonomy.md)**
 - **🥦 BroccoliDB** — Versioned reasoning and long-term memory with Merkle-tree persistence and automated reasoning audits.
 - **🧬 Skill Evolution** — Adaptive learning that optimizes performance over time.
 - **⚡ DBPooling** — High-performance, thread-safe SQLite connection management.

@@ -31,6 +31,16 @@ Experience industrial-grade reliability with the `SqliteConnectionPool`:
 - **Write-Mutex Serialization**: Guarantees data integrity during high-concurrency operations.
 - **Atomic Persistence**: Ensures your agent's state and memory are never corrupted, even during hard restarts.
 
+### 🤖 Existential Autonomy (Self-Regulating Substrate)
+
+Marie's most advanced state: zero-touch engineering governed by systemic health and resource monitors.
+
+- **[Deep Dive: Existential Autonomy Strategy](../design/existential-autonomy.md)**
+- **Systemic Governance**: Autonomous load balancing that throttles activity based on CPU/Memory utilization.
+- **Critique-Driven Remediation**: Self-correcting cycles that learn from failure without model escalation.
+- **Health Steering**: Adaptive guardrails that respond to global systemic health metrics.
+- **Zero-Touch Maintenance**: Self-healing builds and architectural deadlock resolution.
+
 ### 🥦 BroccoliDB (Versioned Reasoning & Memory)
 
 OpenClaw's elite memory engine, BroccoliDB, introduces Merkle-tree persistence and versioned reasoning.
