@@ -82,10 +82,31 @@ export function getConfig(): JoyZoningConfig {
  * - "advisory": always downgrade to "warning"
  * - "strict": always upgrade to "block"
  * - "enforced" (default): use the original level
+ * Adjusts the strictness level based on systemic health and configuration.
  */
-function applyStrictness(level: "warning" | "block"): "warning" | "block" {
+export async function applyStrictness(
+  level: "warning" | "block",
+  _sessionKey?: string,
+): Promise<"warning" | "block"> {
   const config = getConfig();
   const strictness = config.strictness ?? "enforced";
+
+  // Check Systemic Health for Autonomous Hardening
+  try {
+    const { getSystemicHealthScore } = await import("./evolutionary-pilot.js");
+    const health = await getSystemicHealthScore();
+    if (health < 0.6) {
+      log.warn(
+        `[Existential Autonomy] Systemic Health low (${health.toFixed(2)}). Escalating to STRICT enforcement.`,
+      );
+      return "block";
+    }
+  } catch (err) {
+    log.debug(
+      `[JoyZoning] Could not fetch systemic health, defaulting to static strictness: ${String(err)}`,
+    );
+  }
+
   if (strictness === "advisory") {
     return "warning";
   }
@@ -293,11 +314,17 @@ export async function evaluateToolCall(params: {
         level: "block" | "warning";
         message: string;
         sourceLayer: JoyZoningLayer;
-      }[] = validation.errors.map((msg) => ({
-        level: sourceLayer === "Domain" ? "block" : "warning",
-        message: msg,
-        sourceLayer,
-      }));
+      }[] = [];
+
+      for (const msg of validation.errors) {
+        const rawLevel = sourceLayer === "Domain" ? "block" : "warning";
+        const level = await applyStrictness(rawLevel, sessionKey ?? "default");
+        violations.push({
+          level,
+          message: msg,
+          sourceLayer,
+        });
+      }
 
       // b) Deep AST Audit & Entropy Detection
       const deepViolations = await fluidPolicyEngine.audit({
@@ -322,7 +349,7 @@ export async function evaluateToolCall(params: {
           sessionKey: sessionKey ?? "default",
         });
 
-        const violation = resolveContentViolation({
+        const violation = await resolveContentViolation({
           errors: enforced.map((v) => v.message),
           filePath: normalized,
           sourceLayer,
@@ -424,7 +451,7 @@ export async function evaluateToolCall(params: {
         if (normalized) {
           const violationErr = validateDependency(normalized, normalizedImport);
           if (violationErr) {
-            const violation = resolvePathViolation({
+            const violation = await resolvePathViolation({
               message: violationErr,
               sourceLayer: sourceLayer || "Infrastructure",
               targetLayer: getLayer(normalizedImport),
@@ -512,7 +539,7 @@ export function detectLayer(filePath: string): JoyZoningLayer | null {
  * - Domain Strike 2+: Degrade to WARNING (prevent infinite deadlock)
  * - Other layers: Always WARNING
  */
-function resolveContentViolation(params: {
+async function resolveContentViolation(params: {
   errors: string[];
   filePath: string;
   sourceLayer: JoyZoningLayer;
@@ -520,7 +547,7 @@ function resolveContentViolation(params: {
   agentId?: string;
   thoughtSnippet?: string;
   forcedLevel?: "warning" | "block";
-}): JoyZoningViolation {
+}): Promise<JoyZoningViolation> {
   const { errors, filePath, sourceLayer, sessionKey, agentId, thoughtSnippet, forcedLevel } =
     params;
   const fatalErrors = errors.filter((e) => !e.includes("⚠️ DISCERNMENT WARNING"));
@@ -534,7 +561,7 @@ function resolveContentViolation(params: {
       forcedLevel ??
       (isDiscernmentOnly
         ? "warning"
-        : applyStrictness(sourceLayer === "Domain" ? "block" : "warning"));
+        : await applyStrictness(sourceLayer === "Domain" ? "block" : "warning", sessionKey));
 
     const violation: JoyZoningViolation = {
       level,
@@ -565,7 +592,7 @@ function resolveContentViolation(params: {
   // 1. DOMAIN: Zero tolerance — Block on first strike
   if (sourceLayer === "Domain") {
     if (strikes === 1) {
-      const effectiveLevel = forcedLevel ?? applyStrictness("block");
+      const effectiveLevel = forcedLevel ?? (await applyStrictness("block", sessionKey));
       if (effectiveLevel === "block") {
         state.blockCount++;
       } else {
@@ -607,7 +634,7 @@ function resolveContentViolation(params: {
   // 2. CORE / INFRASTRUCTURE: Progressive — Warn 3 times, then Block
   if (sourceLayer === "Core" || sourceLayer === "Infrastructure") {
     const rawLevel: "warning" | "block" = strikes > 3 ? "block" : "warning";
-    const effectiveLevel = forcedLevel ?? applyStrictness(rawLevel);
+    const effectiveLevel = forcedLevel ?? (await applyStrictness(rawLevel, sessionKey));
 
     if (effectiveLevel === "block") {
       state.blockCount++;
@@ -651,7 +678,7 @@ function resolveContentViolation(params: {
 /**
  * Progressive enforcement for path-based dependency violations.
  */
-function resolvePathViolation(params: {
+async function resolvePathViolation(params: {
   message: string;
   sourceLayer: JoyZoningLayer;
   targetLayer: JoyZoningLayer;
@@ -659,14 +686,14 @@ function resolvePathViolation(params: {
   filePath: string;
   agentId?: string;
   thoughtSnippet?: string;
-}): JoyZoningViolation {
+}): Promise<JoyZoningViolation> {
   const { message, sourceLayer, targetLayer, sessionKey, filePath, agentId, thoughtSnippet } =
     params;
   const isSmell = message.includes("Architectural Smell");
 
   if (!sessionKey) {
     return {
-      level: applyStrictness(isSmell ? "warning" : "block"),
+      level: await applyStrictness(isSmell ? "warning" : "block", sessionKey),
       message,
       sourceLayer,
       targetLayer,
@@ -682,7 +709,7 @@ function resolvePathViolation(params: {
     state.strikeMap.set(filePath, strikes);
 
     if (strikes === 1) {
-      const effectiveLevel = applyStrictness("block");
+      const effectiveLevel = await applyStrictness("block", sessionKey);
       if (effectiveLevel === "block") {
         state.blockCount++;
       } else {
@@ -720,7 +747,7 @@ function resolvePathViolation(params: {
     state.warningCount++;
     const rawLevel: "warning" | "block" =
       state.warningCount > MAX_WARNINGS_BEFORE_BLOCK ? "block" : "warning";
-    const level = applyStrictness(rawLevel);
+    const level = await applyStrictness(rawLevel, sessionKey);
 
     if (level === "block") {
       state.blockCount++;
@@ -780,7 +807,7 @@ function detectReflexiveCircularity(sourceLayer: JoyZoningLayer, filePath: strin
   return false; // Placeholder for future graph analysis
 }
 
-function trackViolation(
+export function trackViolation(
   state: JoyZoningPolicyState,
   violation: JoyZoningViolation,
   sessionKey?: string,
@@ -825,6 +852,18 @@ function trackViolation(
         agentId,
         thoughtSnippet: thoughtSnippet?.slice(0, 500), // Cap thought snippet
       });
+      // ── Existential Autonomy: Record Architectural Entropy ──
+      void import("./strategic-evolution-store.js")
+        .then(async (mod) => {
+          const evolutionStore = await mod.getStrategicEvolutionStore();
+          void evolutionStore.recordMetric({
+            sessionKey,
+            type: "architectural_entropy",
+            value: violation.level === "block" ? 1.0 : 0.2,
+            metadata: { filePath, layer: violation.sourceLayer, level: violation.level },
+          });
+        })
+        .catch((err) => log.error(`Failed to record architectural entropy: ${String(err)}`));
     }
   }
 }

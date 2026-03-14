@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   getStrategicEvolutionStore,
   resetStrategicEvolutionStoreForTest,
+  type PersistentBashSession,
 } from "./strategic-evolution-store.js";
 
 describe("StrategicEvolutionStore", () => {
@@ -38,6 +39,104 @@ describe("StrategicEvolutionStore", () => {
     expect(metrics.length).toBe(1);
     expect(metrics[0].value).toBe(0.8);
     expect(JSON.parse(metrics[0].metadata!)).toEqual({ info: "test" });
+  });
+
+  it("should detect fragility trend correctly", async () => {
+    // 1. Stable
+    const sessionStable = "fragile-session-stable";
+    for (let i = 0; i < 5; i++) {
+      await store.recordMetric({
+        sessionKey: sessionStable,
+        type: "semantic_fragility",
+        value: 0.2,
+      });
+    }
+    expect(store.getRecentFragilityTrend(sessionStable)).toBe("stable");
+
+    // 2. Regressing (Increasing fragility)
+    const sessionRegressing = "fragile-session-regressing";
+    for (let i = 0; i < 5; i++) {
+      await store.recordMetric({
+        sessionKey: sessionRegressing,
+        type: "semantic_fragility",
+        value: 0.1 + i * 0.1,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expect(store.getRecentFragilityTrend(sessionRegressing)).toBe("regressing");
+
+    // 3. Improving (Decreasing fragility)
+    const sessionImproving = "fragile-session-improving";
+    for (let i = 0; i < 5; i++) {
+      await store.recordMetric({
+        sessionKey: sessionImproving,
+        type: "semantic_fragility",
+        value: 0.5 - i * 0.1,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expect(store.getRecentFragilityTrend(sessionImproving)).toBe("improving");
+  });
+
+  it("should reconcile entropy with temporal weighting", async () => {
+    const sessionKeyRecent = "recent-fail";
+    const sessionKeyOld = "old-fail";
+    const filePathRecent = "src/recent.ts";
+    const filePathOld = "src/old.ts";
+
+    const now = Date.now();
+
+    // Record entropy for both
+    await store.recordMetric({
+      sessionKey: sessionKeyRecent,
+      type: "architectural_entropy",
+      value: 1.0,
+      metadata: { filePath: filePathRecent },
+    });
+    await store.recordMetric({
+      sessionKey: sessionKeyOld,
+      type: "architectural_entropy",
+      value: 1.0,
+      metadata: { filePath: filePathOld },
+    });
+
+    // Record bash history
+    const recentFail: PersistentBashSession = {
+      id: "fail-1",
+      command: "npm test",
+      sessionKey: sessionKeyRecent,
+      startedAt: now - 1000,
+      endedAt: now - 500,
+      status: "error",
+      exitCode: 1,
+      aggregated: "fail",
+      tail: "fail",
+      truncated: false,
+      totalOutputChars: 4,
+    };
+
+    const oldFail: PersistentBashSession = {
+      id: "fail-2",
+      command: "npm test",
+      sessionKey: sessionKeyOld,
+      startedAt: now - 10 * 3600 * 1000,
+      endedAt: now - 10 * 3600 * 1000 + 500,
+      status: "error",
+      exitCode: 1,
+      aggregated: "fail",
+      tail: "fail",
+      truncated: false,
+      totalOutputChars: 4,
+    };
+
+    await store.saveBashHistory(recentFail);
+    await store.saveBashHistory(oldFail);
+
+    const hotspots = store.reconcileEntropy({ limit: 10 });
+
+    // The recent failure should have a higher weighted score and thus appear first
+    expect(hotspots[0]).toBe(filePathRecent);
+    expect(hotspots).toContain(filePathOld);
   });
 
   it("should track recall hits", async () => {

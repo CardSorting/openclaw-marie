@@ -166,7 +166,7 @@ export type DiagnosticJoyZoningEvent = DiagnosticBaseEvent & {
 export type DiagnosticStrategicMetricEvent = DiagnosticBaseEvent & {
   type: "strategic.metric";
   sessionKey?: string;
-  metricType: "sentiment" | "discovery" | "surprise";
+  metricType: "sentiment" | "discovery" | "surprise" | "semantic_fragility";
   value: number;
   message?: string;
 };

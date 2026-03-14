@@ -14,6 +14,7 @@ import {
 } from "../routing/session-key.js";
 import { normalizeDeliveryContext } from "../utils/delivery-context.js";
 import { resolveAgentConfig, resolveAgentWorkspaceDir } from "./agent-scope.js";
+import { getSystemicHealthScore } from "./evolutionary-pilot.js";
 import { AGENT_LANE_SUBAGENT } from "./lanes.js";
 import { resolveSubagentSpawnModelSelection } from "./model-selection.js";
 import { resolveSandboxRuntimeStatus } from "./sandbox/runtime-status.js";
@@ -303,6 +304,24 @@ export async function spawnSubagentDirect(
     typeof params.runTimeoutSeconds === "number" && Number.isFinite(params.runTimeoutSeconds)
       ? Math.max(0, Math.floor(params.runTimeoutSeconds))
       : cfgSubagentTimeout;
+
+  // ── Nervous System: Systemic Throttling ──
+  const health = await getSystemicHealthScore();
+  const isEssential = [
+    "Autonomous Memory Compaction",
+    "Autonomous Memory Repair",
+    "Toxic Hotspot Repair",
+    "Autonomous Architectural Hardening",
+    "Autonomous Remediation",
+  ].includes(label);
+
+  if (health < 0.3 && !isEssential) {
+    return {
+      status: "forbidden",
+      error: `CRITICAL SYSTEM HEALTH (${health.toFixed(2)}): Non-essential subagent spawns are throttled. Please resolve systemic instability first.`,
+    };
+  }
+
   let modelApplied = false;
   let threadBindingReady = false;
   const { mainKey, alias } = resolveMainSessionAlias(cfg);

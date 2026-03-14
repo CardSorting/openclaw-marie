@@ -55,34 +55,48 @@ export class FluidPolicyEngine {
     // 2. Entropy Detection (Drift Validation)
     if (params.prevResultHash) {
       const store = await getStrategicEvolutionStore();
-      const currentHash = this.calculateHash(params.content);
-      const stateKey = `entropy:${params.filePath}`;
-      const existingState = store.getSessionState<EntropyState>(params.sessionKey, stateKey);
 
-      if (existingState && existingState.prevResultHash !== params.prevResultHash) {
-        log.warn(
-          `Entropy Drift Detected for ${params.filePath}: Expected ${params.prevResultHash}, got ${currentHash}. Triggering Autonomous Sync & Audit.`,
-        );
+      // Fix potential race conditions by using a short-lived audit lock
+      const lockKey = `audit:${params.filePath}`;
+      const lockAcquired = await store.acquireLock(lockKey, 5000); // 5s TTL
 
-        // Phase 3: Autonomous Conflict Resolution
-        void this.triggerAutonomousSync({
-          filePath: params.filePath,
-          expectedHash: params.prevResultHash,
-          actualHash: currentHash,
-          sessionKey: params.sessionKey,
-        }).catch(() => {});
-
-        violations.push({
-          level: "block", // Escalate to block in Phase 3
-          message: `⚠️ ENTROPY CONFLICT: The file has been modified concurrently. An autonomous synchronization pass has been scheduled. Refactor temporarily suspended.`,
-          sourceLayer: params.layer,
-        });
+      if (!lockAcquired) {
+        // If we can't get the lock, just wait a bit and retry once or proceed with caution
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      await store.setSessionState(params.sessionKey, stateKey, {
-        prevResultHash: currentHash,
-        lastExecutionTs: Date.now(),
-      });
+      try {
+        const currentHash = this.calculateHash(params.content);
+        const stateKey = `entropy:${params.filePath}`;
+        const existingState = store.getSessionState<EntropyState>(params.sessionKey, stateKey);
+
+        if (existingState && existingState.prevResultHash !== params.prevResultHash) {
+          log.warn(
+            `Entropy Drift Detected for ${params.filePath}: Expected ${params.prevResultHash}, got ${currentHash}. Triggering Autonomous Sync & Audit.`,
+          );
+
+          // Phase 3: Autonomous Conflict Resolution
+          void this.triggerAutonomousSync({
+            filePath: params.filePath,
+            expectedHash: params.prevResultHash,
+            actualHash: currentHash,
+            sessionKey: params.sessionKey,
+          }).catch(() => {});
+
+          violations.push({
+            level: "block", // Escalate to block in Phase 3
+            message: `⚠️ ENTROPY CONFLICT: The file has been modified concurrently. An autonomous synchronization pass has been scheduled. Refactor temporarily suspended.`,
+            sourceLayer: params.layer,
+          });
+        }
+
+        await store.setSessionState(params.sessionKey, stateKey, {
+          prevResultHash: currentHash,
+          lastExecutionTs: Date.now(),
+        });
+      } finally {
+        await store.releaseLock(lockKey);
+      }
     }
 
     return violations;
@@ -107,12 +121,15 @@ export class FluidPolicyEngine {
   }): Promise<PolicyViolation[]> {
     const successRate = await this.getRemediationSuccessRate(params.sessionKey);
     const systemicHealth = await getSystemicHealthScore();
+    const fragility = await this.getSemanticFragility(params.sessionKey);
 
-    // Systemic Steering: Tighten thresholds globally if system is regressing
+    // Systemic Steering: Tighten thresholds globally if system is regressing or drifting
     const systemicPressure = systemicHealth < 0.6 ? 2 : 0;
+    const fragilityPressure = fragility > 0.3 ? 1 : fragility > 0.5 ? 2 : 0;
+
     const dynamicThreshold = Math.max(
-      2,
-      (successRate < 0.5 ? 3 : REFACTOR_MODE_THRESHOLD) - systemicPressure,
+      1, // Absolute strictness under extreme pressure
+      (successRate < 0.5 ? 3 : REFACTOR_MODE_THRESHOLD) - systemicPressure - fragilityPressure,
     );
 
     // Heuristic Choke Point Detection
@@ -135,7 +152,15 @@ export class FluidPolicyEngine {
       // A. Refactor Mode Escalation (High strikes)
       else if (isRefactorMode) {
         level = "block";
-        message = `🛑 REFACTOR MODE (Strike ${params.strikes}): All architectural smells are now BLOCKED until debt is cleared. REFACTOR THIS FILE IMMEDIATELY. ${message}`;
+        let transparency = "";
+        if (systemicPressure > 0) {
+          transparency += ` [Systemic Health Pressure: -${systemicPressure}]`;
+        }
+        if (fragilityPressure > 0) {
+          transparency += ` [Semantic Fragility Pressure: -${fragilityPressure}]`;
+        }
+
+        message = `🛑 REFACTOR MODE (Strike ${params.strikes}): All architectural smells are now BLOCKED until debt is cleared.${transparency} REFACTOR THIS FILE IMMEDIATELY. ${message}`;
       }
 
       // B. Hardened Enforcement (Domain/Core purity)
@@ -155,7 +180,7 @@ export class FluidPolicyEngine {
       return { ...v, level, message };
     });
 
-    const blockViolations = params.violations.filter((v) => v.level === "block");
+    const blockViolations = results.filter((v) => v.level === "block");
     if (blockViolations.length > 0) {
       void this.triggerAutonomousRemediation({
         filePath: params.filePath,
@@ -188,6 +213,23 @@ export class FluidPolicyEngine {
   }
 
   /**
+   * Calculates recent semantic fragility scores from the store.
+   */
+  private async getSemanticFragility(sessionKey: string): Promise<number> {
+    try {
+      const store = await getStrategicEvolutionStore();
+      const sessionStats = store.getStats({ sessionKey, type: "semantic_fragility" });
+      if (sessionStats.count > 0) {
+        return sessionStats.mean;
+      }
+      const globalStats = store.getStats({ type: "semantic_fragility" });
+      return globalStats.mean;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
    * Spawns a subagent to fix the violation.
    * Hardened: Uses persistent locks and verifiable task descriptions.
    */
@@ -199,6 +241,13 @@ export class FluidPolicyEngine {
     sessionKey: string;
   }) {
     const store = await getStrategicEvolutionStore();
+
+    if (store.getSessionState<boolean>(params.sessionKey, "autonomy_blocked")) {
+      log.warn(
+        `[Nervous System] Autonomous Remediation blocked for ${params.filePath} due to high fragility circuit breaker.`,
+      );
+      return;
+    }
 
     // Phase 3: Autonomous Governance
     const load = store.getSystemicLoad();
@@ -275,6 +324,9 @@ If you cannot fix it, do not make changes. If you fix it, the system will verify
         success: true,
       });
     } catch (err) {
+      // Release lock on spawn failure
+      await store.releaseLock(`remediate:${params.filePath}`);
+
       emitDiagnosticEvent({
         type: "agent.remediation",
         sessionKey: params.sessionKey,

@@ -14,6 +14,20 @@ import {
 } from "./strategic-evolution-store.js";
 import { spawnSubagentDirect } from "./subagent-spawn.js";
 
+// ── Systemic Health Registry (breaks circular dependency with JoyZoning) ──
+let _healthProvider: (() => Promise<number>) | null = null;
+
+export function registerHealthProvider(provider: () => Promise<number>) {
+  _healthProvider = provider;
+}
+
+export async function getSystemicHealthScore(): Promise<number> {
+  if (_healthProvider) {
+    return await _healthProvider();
+  }
+  return 0.8; // Default baseline if not registered
+}
+
 const log = createSubsystemLogger("agents/evolutionary-pilot");
 
 const VERIFICATION_WINDOW = 20;
@@ -44,29 +58,46 @@ export async function initEvolutionaryPilot() {
       );
     } else if (event.type === "strategic.metric" && event.sessionKey) {
       void handleStrategicMetric(event.sessionKey, event.metricType, event.value).catch(() => {});
+      if (event.metricType === "semantic_fragility") {
+        void handleFragilityEvent(event.sessionKey, event.value).catch(() => {});
+      }
     } else if (event.type === "agent.remediation" && event.sessionKey) {
       void handleRemediationEvent(event.sessionKey, event.success).catch(() => {});
     } else if (event.type === "agent.compaction" && event.sessionKey) {
       void handleCompactionEvent(event.sessionKey, event.efficiency).catch(() => {});
+    } else if (event.type === "jz.violation" && event.sessionKey) {
+      void handleEntropyEvent(event.sessionKey, event.filePath, event.level).catch(() => {});
     }
   });
+
+  registerHealthProvider(computeSystemicHealth);
+
   log.info("EvolutionaryPilot initialized and listening for performance metrics.");
 }
 
 /**
- * Calculates a global health score (0-1) based on systemic success rates and latencies.
+ * Calculates a global health score (0-1) based on systemic success rates, latencies, and architectural entropy.
  */
-export async function getSystemicHealthScore(): Promise<number> {
+async function computeSystemicHealth(): Promise<number> {
   const store = await getStrategicEvolutionStore();
-  const stats = store.getStats({ type: "success_rate" });
+  const successStats = store.getStats({ type: "success_rate" });
+  const entropyStats = store.getStats({ type: "architectural_entropy" });
 
-  if (stats.count === 0) {
-    return 0.8;
-  } // Default to healthy-ish baseline
+  let score = 0.8; // Default baseline
 
-  // High success rate = high health.
-  // We can also factor in latency stdDev if we want to detect "instability".
-  return stats.mean;
+  if (successStats.count > 0) {
+    score = successStats.mean;
+  }
+
+  // Penalize health based on architectural entropy (violations)
+  if (entropyStats.count > 0) {
+    // Entropy mean near 1.0 means lots of blocks. Near 0.2 means warnings.
+    // We want health to drop as entropy mean or count increases.
+    const entropyPenalty = Math.min(0.4, entropyStats.mean * (entropyStats.count / 10));
+    score -= entropyPenalty;
+  }
+
+  return Math.max(0.1, score);
 }
 
 /**
@@ -161,6 +192,36 @@ async function handleStrategicMetric(sessionKey: string, type: string, value: nu
     } else {
       await savePerf(sessionKey, perf);
     }
+  } else if (type === "semantic_fragility" && value > 0.4) {
+    log.warn(`Cognitive Drift Alert: High semantic fragility (${value.toFixed(2)}) detected.`);
+    // Fragility handled by handleFragilityEvent
+  }
+}
+
+async function handleFragilityEvent(sessionKey: string, fragility: number) {
+  const store = await getStrategicEvolutionStore();
+  await store.recordMetric({
+    sessionKey,
+    type: "semantic_fragility",
+    value: fragility,
+  });
+
+  const trend = store.getRecentFragilityTrend(sessionKey);
+
+  // Autonomy Circuit Breaker: If fragility is high and regressing, block autonomous repairs.
+  if (fragility > 0.6 && trend === "regressing") {
+    log.error(
+      `[Nervous System] CRITICAL: Semantic Fragility is high (${fragility.toFixed(2)}) and REGRESSING. Triggering Autonomy Circuit Breaker.`,
+    );
+    await store.setSessionState(sessionKey, "autonomy_blocked", true);
+    return;
+  }
+
+  if (fragility > 0.35) {
+    log.warn(
+      `[Nervous System] High Semantic Fragility (${fragility.toFixed(2)}) detected. Escalating to STICT-mode memory repair.`,
+    );
+    // triggerAutonomousMemoryRepair will check if autonomy is blocked
   }
 }
 
@@ -257,6 +318,10 @@ async function handleCompactionCompletion(sessionKey: string, store: StrategicEv
   if (!sourceSession) {
     return;
   }
+
+  // Release Compaction Lock
+  await store.releaseLock(`compact:${sourceSession}`);
+
   const preUsage = store.getSessionState<number>(sourceSession, "compaction_pre_usage");
 
   if (!preUsage) {
@@ -303,6 +368,14 @@ async function handleCompactionCompletion(sessionKey: string, store: StrategicEv
 }
 
 async function triggerAutonomousMemoryRepair(sessionKey: string, lostFacts: string[]) {
+  const store = await getStrategicEvolutionStore();
+  if (store.getSessionState<boolean>(sessionKey, "autonomy_blocked")) {
+    log.warn(
+      `[Nervous System] Autonomous Memory Repair blocked due to high fragility circuit breaker.`,
+    );
+    return;
+  }
+
   const task = `
 I am an autonomous memory repair subagent. During the last compaction cycle, the following critical facts/entities were lost or pruned too aggressively:
 LOST ENTITIES:
@@ -350,6 +423,9 @@ async function handleRemediationCompletion(sessionKey: string, store: StrategicE
     return;
   }
 
+  // Release Remediation Lock
+  await store.releaseLock(`remediate:${filePath}`);
+
   try {
     const content = await fs.readFile(filePath, "utf8");
     const violations = await fluidPolicyEngine.audit({
@@ -396,4 +472,89 @@ async function handleRemediationCompletion(sessionKey: string, store: StrategicE
       `Failed to verify remediation for ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+}
+
+/**
+ * Handles incoming architectural entropy events (violations).
+ * Triggers autonomous hardening if a file crosses a "Chaos Threshold".
+ */
+async function handleEntropyEvent(sessionKey: string, filePath: string, level: string) {
+  const store = await getStrategicEvolutionStore();
+
+  // Record entropy metric
+  await store.recordMetric({
+    sessionKey,
+    type: "architectural_entropy",
+    value: level === "block" ? 1.0 : 0.2,
+    metadata: { filePath, level, activity: "jz_violation" },
+  });
+
+  // Check for entropy hotspots
+  const metrics = store.getRecentMetrics({ sessionKey, type: "architectural_entropy", limit: 10 });
+  const fileViolations = metrics.filter((m) => {
+    try {
+      const meta = JSON.parse(m.metadata || "{}") as { filePath?: string };
+      return meta.filePath === filePath;
+    } catch {
+      return false;
+    }
+  });
+
+  if (fileViolations.length >= 3) {
+    log.warn(
+      `[Existential Autonomy] Entropy Hotspot: ${filePath} has ${fileViolations.length} violations. Checking for failure correlation...`,
+    );
+
+    // Nervous System: Correlate with failed bash commands to find "Toxic Hotspots"
+    const hotspots = store.reconcileEntropy({ limit: 20 });
+    const isToxic = hotspots.includes(filePath);
+
+    if (isToxic) {
+      log.warn(
+        `[Nervous System] Toxic Hotspot Confirmed: ${filePath}. Escalating repair priority.`,
+      );
+      await triggerAutonomousHardening(sessionKey, filePath, true);
+    } else {
+      await triggerAutonomousHardening(sessionKey, filePath, false);
+    }
+  }
+}
+
+/**
+ * Spawns an Architect Subagent to refactor a file that keeps violating JoyZoning rules.
+ */
+async function triggerAutonomousHardening(
+  sessionKey: string,
+  filePath: string,
+  toxic: boolean = false,
+) {
+  const store = await getStrategicEvolutionStore();
+  if (store.getSessionState<boolean>(sessionKey, "autonomy_blocked")) {
+    log.warn(
+      `[Nervous System] Autonomous Hardening blocked due to high fragility circuit breaker.`,
+    );
+    return;
+  }
+
+  const task = `
+I am an autonomous Architect Subagent. The file \`${filePath}\` has repeatedly violated JoyZoning architectural rules.
+${toxic ? "\nCRITICAL: This file is a TOXIC HOTSPOT. It has been correlated with actual session failures. Fix immediately.\n" : ""}
+
+TASK:
+1. Audit \`${filePath}\` and its dependencies.
+2. Refactor the code to eliminate architectural smells and illegal cross-layer imports.
+3. Ensure the file conforms perfectly to JoyZoning layers (Domain, Core, Infrastructure, etc.).
+
+Do not compromise on architectural integrity. If logic needs to be moved to a different layer, do it.
+`;
+
+  await spawnSubagentDirect(
+    {
+      task,
+      label: toxic ? "Toxic Hotspot Repair" : "Autonomous Architectural Hardening",
+    },
+    {
+      agentSessionKey: sessionKey,
+    },
+  );
 }

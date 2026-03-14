@@ -48,12 +48,27 @@ export async function runAutonomousCompaction(params: {
 
   const store = await getStrategicEvolutionStore();
 
+  if (store.getSessionState<boolean>(params.sessionKey, "autonomy_blocked")) {
+    log.warn(
+      `[Nervous System] Autonomous Compaction blocked for ${params.sessionKey} due to high fragility circuit breaker.`,
+    );
+    return;
+  }
+
   // Phase 3: Autonomous Governance
   const load = store.getSystemicLoad();
   if (!params.force && load.aggregate > 0.9) {
     log.warn(
       `Systemic Overload Detected (${(load.aggregate * 100).toFixed(1)}%). Deferring memory compaction for ${params.sessionKey}`,
     );
+    return;
+  }
+
+  // Use Systemic Lock for Compaction
+  const lockKey = `compact:${params.sessionKey}`;
+  const lockAcquired = await store.acquireLock(lockKey, 3600_000); // 1 hour TTL
+  if (!lockAcquired) {
+    log.info(`Compaction already in progress or locked for ${params.sessionKey}`);
     return;
   }
 
@@ -83,22 +98,28 @@ Respond by using the marie_memory_update tool with the pruned content. Focus on 
   const entities = extractEntities(`${memory}\n${userModel}`);
   await store.setSessionState(params.sessionKey, "compaction_pre_entities", entities);
 
-  const result = await spawnSubagentDirect(
-    {
-      task,
-      label: "Autonomous Memory Compaction",
-    },
-    {
-      agentSessionKey: params.sessionKey,
-    },
-  );
-
-  if (result.childSessionKey) {
-    await store.setSessionState(result.childSessionKey, "is_compaction", true);
-    await store.setSessionState(
-      result.childSessionKey,
-      "compaction_source_session",
-      params.sessionKey,
+  try {
+    const result = await spawnSubagentDirect(
+      {
+        task,
+        label: "Autonomous Memory Compaction",
+      },
+      {
+        agentSessionKey: params.sessionKey,
+      },
     );
+
+    if (result.childSessionKey) {
+      await store.setSessionState(result.childSessionKey, "is_compaction", true);
+      await store.setSessionState(
+        result.childSessionKey,
+        "compaction_source_session",
+        params.sessionKey,
+      );
+    }
+  } catch (err) {
+    // Release lock on spawn failure
+    await store.releaseLock(lockKey);
+    throw err;
   }
 }

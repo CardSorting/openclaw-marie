@@ -9,7 +9,14 @@ const log = createSubsystemLogger("agents/strategic-evolution-store");
 
 type StatementSync = ReturnType<DatabaseSync["prepare"]>;
 
-export type MetricType = "sentiment" | "discovery" | "surprise" | "latency" | "success_rate";
+export type MetricType =
+  | "sentiment"
+  | "discovery"
+  | "surprise"
+  | "latency"
+  | "success_rate"
+  | "architectural_entropy"
+  | "semantic_fragility";
 
 export interface StoredMetric {
   id: string;
@@ -301,6 +308,91 @@ export class StrategicEvolutionStore {
       ).run(key);
     });
   }
+
+  /**
+   * Correlates architectural entropy with bash failures to identify Toxic Hotspots.
+   * Returns a list of file paths that are likely causing systemic instability.
+   * Uses temporal weighting (exponential decay) to prioritize recent failures.
+   */
+  public reconcileEntropy(params: { limit?: number; windowMs?: number }): string[] {
+    const db = this.pool.acquireRead();
+    const windowMs = params.windowMs ?? 24 * 3600 * 1000; // 24h default
+    const now = Date.now();
+    const cutoff = now - windowMs;
+
+    // We identify "Toxic Hotspots" by finding files associated with entropy metrics
+    // in sessions that also have failed bash commands (exitCode != 0).
+    // We use a weighted score: 1.0 / (1.0 + age_in_hours)
+    const sql = `
+      SELECT m.metadata,
+             SUM(1.0 / (1.0 + (?-b.endedAt)/3600000.0)) as weighted_score
+      FROM sev_metrics m
+      JOIN sev_bash_history b ON m.sessionKey = b.sessionKey
+      WHERE m.type = 'architectural_entropy'
+        AND m.createdAt > ?
+        AND b.exitCode != 0
+        AND b.exitCode IS NOT NULL
+        AND b.endedAt > ?
+      GROUP BY m.metadata
+      ORDER BY weighted_score DESC
+      LIMIT ?
+    `;
+
+    const rows = this.prepare(db, sql).all(now, cutoff, cutoff, params.limit ?? 20) as {
+      metadata: string | null;
+      weighted_score: number;
+    }[];
+    const toxicFiles = new Set<string>();
+
+    for (const row of rows) {
+      if (!row.metadata) {
+        continue;
+      }
+      try {
+        const meta = JSON.parse(row.metadata) as { filePath?: string };
+        if (meta.filePath) {
+          toxicFiles.add(meta.filePath);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return Array.from(toxicFiles).slice(0, params.limit ?? 10);
+  }
+
+  /**
+   * Detects the trend of semantic fragility over the last N metrics.
+   * Returns 'improving', 'stable', or 'regressing'.
+   */
+  public getRecentFragilityTrend(sessionKey: string): "improving" | "stable" | "regressing" {
+    const metrics = this.getRecentMetrics({
+      sessionKey,
+      type: "semantic_fragility",
+      limit: 10,
+    });
+
+    if (metrics.length < 4) {
+      return "stable";
+    }
+
+    // Split into recent and slightly older window
+    const recent = metrics.slice(0, Math.floor(metrics.length / 2));
+    const older = metrics.slice(Math.floor(metrics.length / 2));
+
+    const recentAvg = recent.reduce((a, b) => a + b.value, 0) / recent.length;
+    const olderAvg = older.reduce((a, b) => a + b.value, 0) / older.length;
+
+    const delta = recentAvg - olderAvg;
+
+    if (delta > 0.05) {
+      return "regressing";
+    } else if (delta < -0.05) {
+      return "improving";
+    }
+    return "stable";
+  }
+
   /**
    * Checks if a persistent lock is currently held and valid.
    */

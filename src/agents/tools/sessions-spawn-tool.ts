@@ -1,8 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
-import { ACP_SPAWN_MODES, ACP_SPAWN_STREAM_TARGETS, spawnAcpDirect } from "../acp-spawn.js";
 import { optionalStringEnum } from "../schema/typebox.js";
-import { SUBAGENT_SPAWN_MODES, spawnSubagentDirect } from "../subagent-spawn.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readStringParam, ToolInputError } from "./common.js";
 
@@ -31,10 +29,10 @@ const SessionsSpawnToolSchema = Type.Object({
   // Back-compat: older callers used timeoutSeconds for this tool.
   timeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),
   thread: Type.Optional(Type.Boolean()),
-  mode: optionalStringEnum(SUBAGENT_SPAWN_MODES),
+  mode: optionalStringEnum(["run", "session"] as const),
   cleanup: optionalStringEnum(["delete", "keep"] as const),
   sandbox: optionalStringEnum(SESSIONS_SPAWN_SANDBOX_MODES),
-  streamTo: optionalStringEnum(ACP_SPAWN_STREAM_TARGETS),
+  streamTo: optionalStringEnum(["parent"] as const),
 
   // Inline attachments (snapshot-by-value).
   // NOTE: Attachment contents are redacted from transcript persistence by sanitizeToolCallInputs.
@@ -135,13 +133,14 @@ export function createSessionsSpawnTool(opts?: {
               "attachments are currently unsupported for runtime=acp; use runtime=subagent or remove attachments",
           });
         }
+        const { spawnAcpDirect } = await import("../acp-spawn.js");
         const result = await spawnAcpDirect(
           {
             task,
             label: label || undefined,
             agentId: requestedAgentId,
             cwd,
-            mode: mode && ACP_SPAWN_MODES.includes(mode) ? mode : undefined,
+            mode,
             thread,
             sandbox,
             streamTo,
@@ -158,6 +157,7 @@ export function createSessionsSpawnTool(opts?: {
         return jsonResult(result);
       }
 
+      const { spawnSubagentDirect } = await import("../subagent-spawn.js");
       const result = await spawnSubagentDirect(
         {
           task,
