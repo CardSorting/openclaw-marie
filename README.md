@@ -71,10 +71,11 @@ Before a single action is taken, MarieCoder performs a formal **Intent Grounding
 
 MarieCoder version `2026.3.3` introduces **Existential Autonomy**—a radical hardening of the agentic substrate that eliminates the need for human oversight during complex remediation and maintenance cycles.
 
-- **Systemic Governance**: Autonomous load balancing monitor that throttles subagent spawning and memory compaction based on real-time CPU/Memory utilization.
+- **Systemic Governance & Locking**: Autonomous load balancing monitor that throttles subagent spawning based on real-time CPU/Memory utilization. Employs cross-session **Systemic Locking** to prevent concurrent compaction or remediation conflicts.
+- **Nervous System (Autonomy Circuit Breaker)**: Monitors semantic fragility trends in real-time. If autonomous repairs cause systemic degradation (a "toxic loop"), a circuit breaker triggers to block further unguided mutations and preserve stability.
 - **Critique-Driven Remediation**: Failed attempts generate "Critique Snapshots" (Lessons Learned) which are injected into subsequent retries, preventing regression and enabling self-correction without model escalation.
-- **Health-Adaptive Steering**: A global systemic health score (Success Rate vs. Latency) that dynamically tightens or relaxes architectural guardrails like JoyZoning based on current environment stability.
-- **Autonomous Rollbacks**: Immediate, zero-touch restoration of known-good states in the event of build breakage or remediation failure.
+- **Health-Adaptive Steering**: A global systemic health score (Success Rate vs. Latency) that dynamically tightens or relaxes architectural guardrails like JoyZoning. Includes **Maintenance Transparency** to clearly report why thresholds were altered.
+- **Toxic Hotspot Detection**: Correlates architectural entropy with operational failures using **temporal weighting** (exponential decay), ensuring recent system instability is prioritized for autonomous repair.
 - **Systemic Architect Subagents**: Specialized, high-reasoning subagents with full authority to refactor dependencies and resolve architectural deadlocks.
 
 ---
