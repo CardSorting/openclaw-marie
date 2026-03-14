@@ -146,6 +146,13 @@ export async function configureMemoryForOnboarding(params: {
     }
   }
 
+  if (!apiKeyText) {
+    await prompter.note(
+      "No API key provided for embeddings. BroccoliDB will continue to function but will use keyword-based search only (reduced intelligence).",
+      "Memory Fallback",
+    );
+  }
+
   if (provider === "openai") {
     const customBaseUrl = guardCancel(
       await prompter.text({

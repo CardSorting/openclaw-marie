@@ -71,24 +71,25 @@ export const broccolidbConfigSchema = {
     );
 
     const embedding = cfg.embedding as Record<string, unknown> | undefined;
-    if (!embedding || typeof embedding.apiKey !== "string") {
-      throw new Error("embedding.apiKey is required");
-    }
-    assertAllowedKeys(embedding, ["apiKey", "model", "baseUrl", "dimensions"], "embedding config");
+    assertAllowedKeys(
+      embedding || {},
+      ["apiKey", "model", "baseUrl", "dimensions"],
+      "embedding config",
+    );
 
-    const model = typeof embedding.model === "string" ? embedding.model : DEFAULT_MODEL;
+    const model = typeof embedding?.model === "string" ? embedding.model : DEFAULT_MODEL;
 
     const captureMaxChars =
       typeof cfg.captureMaxChars === "number" ? Math.floor(cfg.captureMaxChars) : undefined;
 
     return {
       embedding: {
-        provider: (cfg.embedding as any).provider === "google" ? "google" : "openai",
+        provider: (cfg.embedding as any)?.provider === "google" ? "google" : "openai",
         model,
-        apiKey: resolveEnvVars(embedding.apiKey),
+        apiKey: typeof embedding?.apiKey === "string" ? resolveEnvVars(embedding.apiKey) : "",
         baseUrl:
-          typeof embedding.baseUrl === "string" ? resolveEnvVars(embedding.baseUrl) : undefined,
-        dimensions: typeof embedding.dimensions === "number" ? embedding.dimensions : undefined,
+          typeof embedding?.baseUrl === "string" ? resolveEnvVars(embedding.baseUrl) : undefined,
+        dimensions: typeof embedding?.dimensions === "number" ? embedding.dimensions : undefined,
       },
       dbPath: typeof cfg.dbPath === "string" ? cfg.dbPath : DEFAULT_DB_PATH,
       autoCapture: cfg.autoCapture === true,
