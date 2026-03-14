@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { SqliteConnectionPool, getGlobalSqlitePool } from "../memory/sqlite-pool.js";
@@ -240,22 +241,66 @@ export class StrategicEvolutionStore {
   }
 
   /**
-   * Acquires a persistent lock for a session/resource with a TTL.
-   * Returns true if lock was acquired, false if already held and not expired.
+   * Acquires a systemic (global) lock for a resource with a TTL.
+   * Returns true if acquired, false if already held.
    */
-  public async acquireLock(sessionKey: string, resource: string, ttlMs: number): Promise<boolean> {
+  public async acquireLock(resource: string, ttlMs: number): Promise<boolean> {
+    const key = `lock:${resource}`;
     const now = Date.now();
-    const lockKey = `lock:${resource}`;
-    const existing = this.getSessionState<{ expiresAt: number }>(sessionKey, lockKey);
+    const expiresAt = now + ttlMs;
 
-    if (existing && existing.expiresAt > now) {
-      return false;
-    }
+    return await this.pool.withWriteLock((db) => {
+      const existing = this.prepare(
+        db,
+        `SELECT stateValue, updatedAt FROM sev_session_state WHERE sessionKey = 'global' AND stateKey = ?`,
+      ).get(key) as { stateValue: string; updatedAt: number } | undefined;
 
-    await this.setSessionState(sessionKey, lockKey, { expiresAt: now + ttlMs });
-    return true;
+      if (existing) {
+        const lockData = JSON.parse(existing.stateValue) as { expiresAt: number };
+        if (now < lockData.expiresAt) {
+          return false; // Lock still valid
+        }
+      }
+
+      this.prepare(
+        db,
+        `INSERT OR REPLACE INTO sev_session_state (sessionKey, stateKey, stateValue, updatedAt) VALUES ('global', ?, ?, ?)`,
+      ).run(key, JSON.stringify({ expiresAt }), now);
+      return true;
+    });
   }
 
+  /**
+   * Returns a systemic load score (0-1) based on CPU and Memory usage.
+   */
+  public getSystemicLoad(): { cpu: number; mem: number; aggregate: number } {
+    const cpus = os.cpus();
+    const loadAvg = os.loadavg()[0]; // 1 min avg
+    const cpuScale = loadAvg / cpus.length;
+
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const memScale = 1 - freeMem / totalMem;
+
+    return {
+      cpu: cpuScale,
+      mem: memScale,
+      aggregate: (cpuScale + memScale) / 2,
+    };
+  }
+
+  /**
+   * Explicitly releases a global lock.
+   */
+  public async releaseLock(resource: string): Promise<void> {
+    const key = `lock:${resource}`;
+    await this.pool.withWriteLock((db) => {
+      this.prepare(
+        db,
+        `DELETE FROM sev_session_state WHERE sessionKey = 'global' AND stateKey = ?`,
+      ).run(key);
+    });
+  }
   /**
    * Checks if a persistent lock is currently held and valid.
    */

@@ -33,7 +33,7 @@ export async function initEvolutionaryPilot() {
   const store = await getStrategicEvolutionStore();
 
   // Autonomous Maintenance Cycle
-  void store.maintenance().catch((err) => log.error(`Maintenance failed: ${err}`));
+  void store.maintenance().catch((err: unknown) => log.error(`Maintenance failed: ${String(err)}`));
 
   onDiagnosticEvent(async (event: DiagnosticEventPayload) => {
     if (event.type === "model.usage" && event.sessionKey) {
@@ -51,6 +51,22 @@ export async function initEvolutionaryPilot() {
     }
   });
   log.info("EvolutionaryPilot initialized and listening for performance metrics.");
+}
+
+/**
+ * Calculates a global health score (0-1) based on systemic success rates and latencies.
+ */
+export async function getSystemicHealthScore(): Promise<number> {
+  const store = await getStrategicEvolutionStore();
+  const stats = store.getStats({ type: "success_rate" });
+
+  if (stats.count === 0) {
+    return 0.8;
+  } // Default to healthy-ish baseline
+
+  // High success rate = high health.
+  // We can also factor in latency stdDev if we want to detect "instability".
+  return stats.mean;
 }
 
 /**
@@ -375,7 +391,7 @@ async function handleRemediationCompletion(sessionKey: string, store: StrategicE
       filePath,
       success,
     });
-  } catch (err) {
+  } catch (err: unknown) {
     log.error(
       `Failed to verify remediation for ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
     );

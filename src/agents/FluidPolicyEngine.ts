@@ -3,6 +3,7 @@ import path from "node:path";
 import { emitDiagnosticEvent } from "../infra/diagnostic-events.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { TspPolicyPlugin, type JoyZoningLayer } from "../security/TspPolicyPlugin.js";
+import { getSystemicHealthScore } from "./evolutionary-pilot.js";
 import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
 import { spawnSubagentDirect } from "./subagent-spawn.js";
 
@@ -39,7 +40,7 @@ export class FluidPolicyEngine {
     const violations: PolicyViolation[] = [];
 
     // 1. Deep AST Audit
-    if (params.filePath.endsWith(".ts") || params.filePath.endsWith(".js")) {
+    {
       const tspViolations = this.tspPlugin.audit(params.filePath, params.content, params.layer);
       for (const v of tspViolations) {
         violations.push({
@@ -60,11 +61,20 @@ export class FluidPolicyEngine {
 
       if (existingState && existingState.prevResultHash !== params.prevResultHash) {
         log.warn(
-          `Entropy Drift Detected for ${params.filePath}: Expected ${params.prevResultHash}, got ${currentHash}`,
+          `Entropy Drift Detected for ${params.filePath}: Expected ${params.prevResultHash}, got ${currentHash}. Triggering Autonomous Sync & Audit.`,
         );
+
+        // Phase 3: Autonomous Conflict Resolution
+        void this.triggerAutonomousSync({
+          filePath: params.filePath,
+          expectedHash: params.prevResultHash,
+          actualHash: currentHash,
+          sessionKey: params.sessionKey,
+        }).catch(() => {});
+
         violations.push({
-          level: "warning",
-          message: `⚠️ ENTROPY DRIFT: The file content has diverged from the expected baseline. This may indicate uncoordinated concurrent modifications.`,
+          level: "block", // Escalate to block in Phase 3
+          message: `⚠️ ENTROPY CONFLICT: The file has been modified concurrently. An autonomous synchronization pass has been scheduled. Refactor temporarily suspended.`,
           sourceLayer: params.layer,
         });
       }
@@ -96,8 +106,14 @@ export class FluidPolicyEngine {
     sessionKey: string;
   }): Promise<PolicyViolation[]> {
     const successRate = await this.getRemediationSuccessRate(params.sessionKey);
-    // Dynamic Steering: If success rate < 50%, lower the threshold to 3 strikes
-    const dynamicThreshold = successRate < 0.5 ? 3 : REFACTOR_MODE_THRESHOLD;
+    const systemicHealth = await getSystemicHealthScore();
+
+    // Systemic Steering: Tighten thresholds globally if system is regressing
+    const systemicPressure = systemicHealth < 0.6 ? 2 : 0;
+    const dynamicThreshold = Math.max(
+      2,
+      (successRate < 0.5 ? 3 : REFACTOR_MODE_THRESHOLD) - systemicPressure,
+    );
 
     // Heuristic Choke Point Detection
     const isChokePoint = params.strikes > dynamicThreshold + 2 && successRate < 0.3;
@@ -109,7 +125,12 @@ export class FluidPolicyEngine {
 
       if (isChokePoint) {
         level = "block";
-        message = `🔥 [HEURISTIC CHOKE POINT DETECTED] This file is in an architectural deadlock. Strikes: ${params.strikes}, Remediation Success: ${(successRate * 100).toFixed(1)}%. Manual architectural intervention required immediately. ${message}`;
+        message = `🔥 [HEURISTIC CHOKE POINT DETECTED] This file is in an architectural deadlock. Systemic Health: ${(systemicHealth * 100).toFixed(1)}%. Triggering Systemic Architect. ${message}`;
+        void this.triggerSystemicArchitect({
+          filePath: params.filePath,
+          sessionKey: params.sessionKey,
+          layer: params.layer,
+        }).catch(() => {});
       }
       // A. Refactor Mode Escalation (High strikes)
       else if (isRefactorMode) {
@@ -178,11 +199,18 @@ export class FluidPolicyEngine {
     sessionKey: string;
   }) {
     const store = await getStrategicEvolutionStore();
-    const lockAcquired = await store.acquireLock(
-      params.sessionKey,
-      `remediate:${params.filePath}`,
-      3600_000,
-    ); // 1 hour TTL
+
+    // Phase 3: Autonomous Governance
+    const load = store.getSystemicLoad();
+    if (load.aggregate > 0.85) {
+      log.warn(
+        `Systemic Overload Detected (Load: ${(load.aggregate * 100).toFixed(1)}%). Throttling remediation for ${params.filePath}`,
+      );
+      return;
+    }
+
+    // Use Systemic (Session-Agnostic) Lock for the file
+    const lockAcquired = await store.acquireLock(`remediate:${params.filePath}`, 3600_000); // 1 hour TTL
 
     if (!lockAcquired) {
       log.info(`Remediation already in progress or locked for ${params.filePath}`);
@@ -271,6 +299,67 @@ If you cannot fix it, do not make changes. If you fix it, the system will verify
       return "This file has accumulated extreme architectural debt. Break it down into smaller, layer-compliant modules. Move cross-layer dependencies to the appropriate targets.";
     }
     return null;
+  }
+
+  /**
+   * Spawns a high-reasoning Systemic Architect subagent to break architectural deadlocks.
+   */
+  private async triggerSystemicArchitect(params: {
+    filePath: string;
+    sessionKey: string;
+    layer: JoyZoningLayer;
+  }) {
+    const task = `
+I am a Systemic Architect subagent. A "Choke Point" (architectural deadlock) has been detected for file: ${params.filePath}.
+The system has failed to fix this file through simple remediation.
+
+TASK:
+1. Analyze ${params.filePath} AND its immediate dependencies/consumers.
+2. Design a systemic refactor that resolves the Layer Purity violations for ${params.layer}.
+3. Implement the refactor, potentially splitting the file or extracting interfaces to break the deadlock.
+4. You have a broader scope than remediation; you can edit multiple files if required to restore architectural integrity.
+`;
+
+    log.info(`Spawning Systemic Architect for ${params.filePath}`);
+    await spawnSubagentDirect(
+      {
+        task,
+        label: `Systemic Architect: ${path.basename(params.filePath)}`,
+        model: "o1-preview", // Use high-reasoning for architect
+      },
+      {
+        agentSessionKey: params.sessionKey,
+      },
+    );
+  }
+
+  private async triggerAutonomousSync(params: {
+    filePath: string;
+    expectedHash: string;
+    actualHash: string;
+    sessionKey: string;
+  }) {
+    const task = `
+I am an autonomous synchronization subagent. A conflict (Entropy Drift) has been detected for file: ${params.filePath}.
+EXPECTED HASH (YOUR BASELINE): ${params.expectedHash}
+ACTUAL HASH (ON DISK): ${params.actualHash}
+
+TASK:
+1. Read the current file content.
+2. Reconcile any concurrent changes.
+3. Verify that the file still adheres to architectural guardrails after the merge.
+4. If remediation is still needed, perform it on the synchronized version.
+`;
+
+    await spawnSubagentDirect(
+      {
+        task,
+        label: `Sync & Audit: ${path.basename(params.filePath)}`,
+      },
+      {
+        agentSessionKey: params.sessionKey,
+      },
+    );
   }
 }
 

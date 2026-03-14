@@ -46,6 +46,17 @@ export async function runAutonomousCompaction(params: {
     return;
   }
 
+  const store = await getStrategicEvolutionStore();
+
+  // Phase 3: Autonomous Governance
+  const load = store.getSystemicLoad();
+  if (!params.force && load.aggregate > 0.9) {
+    log.warn(
+      `Systemic Overload Detected (${(load.aggregate * 100).toFixed(1)}%). Deferring memory compaction for ${params.sessionKey}`,
+    );
+    return;
+  }
+
   log.info(
     `Triggering autonomous compaction for ${params.sessionKey} (Mem: ${memRatio.toFixed(2)}, User: ${userRatio.toFixed(2)})`,
   );
@@ -65,7 +76,6 @@ ${userModel}
 
 Respond by using the marie_memory_update tool with the pruned content. Focus on high-signal information and remove redundancies.`;
 
-  const store = await getStrategicEvolutionStore();
   const preUsage = memUsed + userUsed;
   await store.setSessionState(params.sessionKey, "compaction_pre_usage", preUsage);
 
