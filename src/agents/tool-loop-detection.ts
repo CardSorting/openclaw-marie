@@ -10,7 +10,8 @@ export type LoopDetectorKind =
   | "generic_repeat"
   | "known_poll_no_progress"
   | "global_circuit_breaker"
-  | "ping_pong";
+  | "ping_pong"
+  | "architectural_deadlock";
 
 export type LoopDetectionResult =
   | { stuck: false }
@@ -27,6 +28,7 @@ export type LoopDetectionResult =
 export const TOOL_CALL_HISTORY_SIZE = 30;
 export const WARNING_THRESHOLD = 10;
 export const CRITICAL_THRESHOLD = 20;
+export const ARCHITECTURAL_DEADLOCK_THRESHOLD = 3; // Force shift after 3 rejections
 export const GLOBAL_CIRCUIT_BREAKER_THRESHOLD = 30;
 const DEFAULT_LOOP_DETECTION_CONFIG = {
   enabled: false,
@@ -474,6 +476,29 @@ export function detectToolCallLoop(
   const recentCount = history.filter(
     (h) => h.toolName === toolName && h.argsHash === currentHash,
   ).length;
+
+  // ── Architectural Deadlock Detector ─────────────────────────────────────
+  // Detects if the agent is stuck repeating a tool call that keeps getting
+  // rejected by architectural enforcement (architectural strikes).
+  const archRejections = history.filter(
+    (h) =>
+      h.toolName === toolName &&
+      h.argsHash === currentHash &&
+      h.resultHash?.startsWith("error:") &&
+      (h.resultHash.includes("ARCHITECTURAL") || h.resultHash.includes("🛑")),
+  ).length;
+
+  if (archRejections >= ARCHITECTURAL_DEADLOCK_THRESHOLD) {
+    log.error(`Architectural deadlock detected: ${toolName} rejected ${archRejections} times`);
+    return {
+      stuck: true,
+      level: "critical",
+      detector: "architectural_deadlock",
+      count: archRejections,
+      message: `CRITICAL: Architectural Deadlock. Your tool call '${toolName}' has been rejected ${archRejections} times due to architectural violations. Repeating this call is not making progress. STOP and refactor your approach to comply with project rules (e.g., move logic to the correct layer or use a different tool).`,
+      warningKey: `arch_deadlock:${toolName}:${currentHash}`,
+    };
+  }
 
   if (
     !knownPollTool &&

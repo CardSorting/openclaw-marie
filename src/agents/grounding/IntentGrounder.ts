@@ -323,6 +323,7 @@ Your previous attempt failed validation or had low confidence. Be more precise a
         "Follow the JoyZoning pillars (Skill Evolution, SecretRef, etc.).",
         "Prefer Bun for TypeScript execution if available.",
         "Maintain turn-over-turn alignment with the provided alignment history.",
+        "For edits to existing files, you MUST include the current file hash as 'prevResultHash' to prevent uncoordinated concurrent modifications.",
       ];
 
       const systemPrompt = `You are the OpenClaw Intent Grounder, a state-of-the-art orchestration pass.

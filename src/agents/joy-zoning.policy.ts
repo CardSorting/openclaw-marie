@@ -155,18 +155,20 @@ export function getOrCreatePolicyState(sessionKey: string): JoyZoningPolicyState
 
 // ── Core Evaluation ─────────────────────────────────────────────────────────
 
+import { fluidPolicyEngine } from "./FluidPolicyEngine.js";
+
 /**
  * Full pre-execution evaluation of a file-modifying tool call.
  *
  * Performs:
- * 1. Content-based smell detection & cross-layer import validation
+ * 1. Content-based smell detection & cross-layer import validation (via FluidPolicyEngine AST audit)
  * 2. Path-based layer dependency validation (if import paths provided)
  * 3. Layer mismatch suggestion for new file creation
  * 4. Per-file strike-based progressive enforcement
  *
  * Returns null if allowed, otherwise returns a JoyZoningViolation.
  */
-export function evaluateToolCall(params: {
+export async function evaluateToolCall(params: {
   toolName: string;
   filePath?: string;
   newPath?: string;
@@ -175,19 +177,22 @@ export function evaluateToolCall(params: {
   sessionKey?: string;
   thought?: string;
   agentId?: string;
-}): JoyZoningViolation | null {
+  prevResultHash?: string;
+}): Promise<JoyZoningViolation | null> {
   // ── Config gate ──
   const config = getConfig();
   if (config.enabled === false) {
     return null;
   }
-  const { toolName, content, importPaths, sessionKey } = params;
+  const { toolName, content, importPaths, sessionKey, prevResultHash } = params;
 
   // ── Absolute Self-Preservation ──
   const jzInfraPaths = [
     "src/infra/joy-zoning-store.ts",
     "src/agents/joy-zoning.policy.ts",
     "src/utils/joy-zoning.ts",
+    "src/agents/FluidPolicyEngine.ts",
+    "src/security/TspPolicyPlugin.ts",
   ];
   if (params.filePath && jzInfraPaths.some((p) => params.filePath!.includes(p))) {
     return {
@@ -277,12 +282,45 @@ export function evaluateToolCall(params: {
   const hasOverride = params.thought?.includes("[JZ:OVERRIDE]");
 
   try {
-    // ── 1. Content-based validation (smells + cross-layer imports) ──────────
+    // ── 1. Content-based validation (Deep AST Audit via FluidPolicyEngine) ──
     if (content && normalized && sourceLayer) {
+      const state = getOrCreatePolicyState(sessionKey ?? "default");
+      const strikes = (state.strikeMap.get(normalized) || 0) + 1;
+
+      // a) Legacy Regex Smells
       const validation = validateJoyZoning(normalized, content);
-      if (!validation.success) {
+      let violations: {
+        level: "block" | "warning";
+        message: string;
+        sourceLayer: JoyZoningLayer;
+      }[] = validation.errors.map((msg) => ({
+        level: sourceLayer === "Domain" ? "block" : "warning",
+        message: msg,
+        sourceLayer,
+      }));
+
+      // b) Deep AST Audit & Entropy Detection
+      const deepViolations = await fluidPolicyEngine.audit({
+        filePath: normalized,
+        content,
+        layer: sourceLayer,
+        toolName,
+        sessionKey: sessionKey ?? "default",
+        prevResultHash,
+      });
+
+      violations = [...violations, ...deepViolations];
+
+      if (violations.length > 0) {
+        // Apply Progressive Enforcement & Hardening
+        const enforced = fluidPolicyEngine.resolveEnforcement({
+          strikes,
+          layer: sourceLayer,
+          violations,
+        });
+
         const violation = resolveContentViolation({
-          errors: validation.errors,
+          errors: enforced.map((v) => v.message),
           filePath: normalized,
           sourceLayer,
           sessionKey,
@@ -478,8 +516,10 @@ function resolveContentViolation(params: {
   sessionKey?: string;
   agentId?: string;
   thoughtSnippet?: string;
+  forcedLevel?: "warning" | "block";
 }): JoyZoningViolation {
-  const { errors, filePath, sourceLayer, sessionKey, agentId, thoughtSnippet } = params;
+  const { errors, filePath, sourceLayer, sessionKey, agentId, thoughtSnippet, forcedLevel } =
+    params;
   const fatalErrors = errors.filter((e) => !e.includes("⚠️ DISCERNMENT WARNING"));
   const isDiscernmentOnly = fatalErrors.length === 0 && errors.length > 0;
 
@@ -487,9 +527,11 @@ function resolveContentViolation(params: {
   const violationSummary = errors.map((e) => `  - ${e}`).join("\n");
 
   if (!sessionKey || isDiscernmentOnly) {
-    const level = isDiscernmentOnly
-      ? "warning"
-      : applyStrictness(sourceLayer === "Domain" ? "block" : "warning");
+    const level =
+      forcedLevel ??
+      (isDiscernmentOnly
+        ? "warning"
+        : applyStrictness(sourceLayer === "Domain" ? "block" : "warning"));
 
     const violation: JoyZoningViolation = {
       level,
@@ -520,7 +562,7 @@ function resolveContentViolation(params: {
   // 1. DOMAIN: Zero tolerance — Block on first strike
   if (sourceLayer === "Domain") {
     if (strikes === 1) {
-      const effectiveLevel = applyStrictness("block");
+      const effectiveLevel = forcedLevel ?? applyStrictness("block");
       if (effectiveLevel === "block") {
         state.blockCount++;
       } else {
@@ -542,8 +584,9 @@ function resolveContentViolation(params: {
     } else {
       // Strike 2+: Degrade to warning
       state.warningCount++;
+      const level = forcedLevel ?? "warning";
       const violation: JoyZoningViolation = {
-        level: "warning",
+        level,
         message: `⚠️ [Architectural Warning] (Strike ${strikes}) Domain layer file has ${errors.length} violation(s):\n${violationSummary}\n\n${hint}\n\nProceeding with warning to prevent deadlock. Please refactor this file soon.`,
         sourceLayer,
         correctionHint: hint,
@@ -561,7 +604,7 @@ function resolveContentViolation(params: {
   // 2. CORE / INFRASTRUCTURE: Progressive — Warn 3 times, then Block
   if (sourceLayer === "Core" || sourceLayer === "Infrastructure") {
     const rawLevel: "warning" | "block" = strikes > 3 ? "block" : "warning";
-    const effectiveLevel = applyStrictness(rawLevel);
+    const effectiveLevel = forcedLevel ?? applyStrictness(rawLevel);
 
     if (effectiveLevel === "block") {
       state.blockCount++;
@@ -590,8 +633,9 @@ function resolveContentViolation(params: {
 
   // 3. PLUMBING / UI: Advisory only — Never block
   state.warningCount++;
+  const level = forcedLevel ?? "warning";
   const violation: JoyZoningViolation = {
-    level: "warning",
+    level,
     message: `⚠️ [Architectural Smell] ${sourceLayer} layer file has ${errors.length} violation(s):\n${violationSummary}\n\nConsider refactoring to keep ${sourceLayer} clean.`,
     sourceLayer,
     correctionHint: hint,

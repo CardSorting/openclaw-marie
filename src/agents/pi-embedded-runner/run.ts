@@ -1204,6 +1204,13 @@ export async function runEmbeddedPiAgent(
           const cloudCodeAssistFormatError = attempt.cloudCodeAssistFormatError;
           const imageDimensionError = parseImageDimensionError(lastAssistant?.errorMessage ?? "");
 
+          if (assistantFailoverReason === "architectural_correction") {
+            log.info(
+              `architectural correction required for ${provider}/${modelId}; retrying prompt with correction hint`,
+            );
+            continue;
+          }
+
           if (
             authFailure &&
             (await maybeRefreshCopilotForAuthError(

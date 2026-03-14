@@ -44,6 +44,7 @@ export type AuthProfileFailureReason =
   | "timeout"
   | "model_not_found"
   | "session_expired"
+  | "architectural_correction"
   | "unknown";
 
 /** Per-profile usage statistics for round-robin and cooldown tracking */

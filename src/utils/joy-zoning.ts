@@ -471,7 +471,11 @@ export function getCorrectionHint(errors: string[]): string {
       );
     } else if (err.includes("any")) {
       fixes.push("Replace 'any' with a typed interface or generic.");
-    } else if (err.includes("Architectural Violation")) {
+    } else if (
+      err.includes("Architectural Violation") ||
+      err.toLowerCase().includes("import") ||
+      err.toLowerCase().includes("depend")
+    ) {
       fixes.push("Move the import to a lower layer or use dependency inversion via interfaces.");
     }
   }

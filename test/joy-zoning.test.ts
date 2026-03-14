@@ -61,7 +61,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
     it("should block tool calls that create cycles", async () => {
       await store.recordDependency("src/domain/a.ts", "src/domain/b.ts");
 
-      const res = evaluateToolCall({
+      const res = await evaluateToolCall({
         toolName: "edit",
         filePath: "src/domain/b.ts",
         importPaths: ["src/domain/a.ts"],
@@ -75,7 +75,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
 
   describe("Enriched attribution", () => {
     it("should store agentId and thought snippets in violations", async () => {
-      evaluateToolCall({
+      await evaluateToolCall({
         toolName: "edit",
         filePath: "src/domain/logic.ts",
         content: "import { raw } from '../infra/db';", // Content violation
@@ -94,8 +94,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
   });
 
   describe("Hardening regressions (Phases 5-8)", () => {
-    it("should respect [JZ:OVERRIDE] break-glass", () => {
-      const res = evaluateToolCall({
+    it("should respect [JZ:OVERRIDE] break-glass", async () => {
+      const res = await evaluateToolCall({
         toolName: "edit",
         filePath: "src/domain/logic.ts",
         content: "import { raw } from '../infra/db';",
@@ -116,8 +116,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
 
   describe("Phase 10: Absolute Perimeter & Self-Preservation", () => {
     describe("Self-Preservation", () => {
-      it("should block modification of Joy-Zoning policy", () => {
-        const res = evaluateToolCall({
+      it("should block modification of Joy-Zoning policy", async () => {
+        const res = await evaluateToolCall({
           toolName: "edit",
           filePath: "src/agents/joy-zoning.policy.ts",
           content: "console.log('tampered');",
@@ -127,8 +127,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         expect(res?.message).toContain("SELF-PRESERVATION");
       });
 
-      it("should block modification of Joy-Zoning store", () => {
-        const res = evaluateToolCall({
+      it("should block modification of Joy-Zoning store", async () => {
+        const res = await evaluateToolCall({
           toolName: "edit",
           filePath: "src/infra/joy-zoning-store.ts",
           content: "DELETE FROM jz_violations;",
@@ -140,8 +140,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
     });
 
     describe("Destruction Prevention", () => {
-      it("should block deletion of files in Domain layer", () => {
-        const res = evaluateToolCall({
+      it("should block deletion of files in Domain layer", async () => {
+        const res = await evaluateToolCall({
           toolName: "delete_file",
           filePath: "src/domain/critical-logic.ts",
           sessionKey: "test-delete",
@@ -150,8 +150,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         expect(res?.message).toContain("DESTRUCTION PREVENTION");
       });
 
-      it("should block deletion of files in Core layer", () => {
-        const res = evaluateToolCall({
+      it("should block deletion of files in Core layer", async () => {
+        const res = await evaluateToolCall({
           toolName: "remove_file",
           filePath: "src/core/agent-orchestrator.ts",
           sessionKey: "test-delete",
@@ -160,8 +160,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         expect(res?.message).toContain("DESTRUCTION PREVENTION");
       });
 
-      it("should allow deletion of files in UI layer (low-risk)", () => {
-        const res = evaluateToolCall({
+      it("should allow deletion of files in UI layer (low-risk)", async () => {
+        const res = await evaluateToolCall({
           toolName: "delete_file",
           filePath: "src/ui/old-button.tsx",
           sessionKey: "test-delete",
@@ -171,8 +171,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
     });
 
     describe("Bash Interception", () => {
-      it("should block destructive rm commands via bash", () => {
-        const res = evaluateToolCall({
+      it("should block destructive rm commands via bash", async () => {
+        const res = await evaluateToolCall({
           toolName: "bash",
           command: "rm -rf src/domain",
           sessionKey: "test-bash",
@@ -181,8 +181,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         expect(res?.message).toContain("DESTRUCTIVE BASH INTERCEPTED");
       });
 
-      it("should block sneaky moves via bash", () => {
-        const res = evaluateToolCall({
+      it("should block sneaky moves via bash", async () => {
+        const res = await evaluateToolCall({
           toolName: "run_command",
           command: "mv src/domain/Logic.ts src/plumbing/Logic.ts",
           sessionKey: "test-bash",
@@ -193,8 +193,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
     });
 
     describe("Multilateral Path Validation (Rename/Move)", () => {
-      it("should block moving Domain files to lower layers (Layer Evasion)", () => {
-        const res = evaluateToolCall({
+      it("should block moving Domain files to lower layers (Layer Evasion)", async () => {
+        const res = await evaluateToolCall({
           toolName: "move",
           filePath: "src/domain/MyPolicy.ts",
           newPath: "src/infrastructure/MyPolicy.ts",
@@ -204,8 +204,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         expect(res?.message).toContain("LAYER EVASION");
       });
 
-      it("should allow moving within the same layer", () => {
-        const res = evaluateToolCall({
+      it("should allow moving within the same layer", async () => {
+        const res = await evaluateToolCall({
           toolName: "rename",
           filePath: "src/domain/OldName.ts",
           newPath: "src/domain/NewName.ts",
@@ -258,7 +258,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
           await store.getOrIncrementStrike(infraPath, "Leaking state");
         }
 
-        const res = evaluateToolCall({
+        const res = await evaluateToolCall({
           toolName: "edit",
           filePath: "src/agents/Orchestrator.ts",
           importPaths: [infraPath],
@@ -274,8 +274,8 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
       it("should survive 50 rapid-fire concurrent violations without SQLITE_BUSY failure", async () => {
         const tasks = Array.from({ length: 50 }).map((_, i) => {
           return new Promise<JoyZoningViolation | null>((resolve) => {
-            setTimeout(() => {
-              const res = evaluateToolCall({
+            setTimeout(async () => {
+              const res = await evaluateToolCall({
                 toolName: "edit",
                 filePath: `src/domain/file-${i}.ts`,
                 content: ": any", // DISCERNMENT WARNING (now a warning)
@@ -305,7 +305,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         const sessionKey = "strike-test";
 
         // Strike 1: Block
-        const res1 = evaluateToolCall({
+        const res1 = await evaluateToolCall({
           toolName: "edit",
           filePath,
           content: "import { db } from '../infra/db';",
@@ -316,7 +316,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
         expect(res1?.message).toContain("ARCHITECTURAL CORRECTION REQUIRED");
 
         // Strike 2: Warning
-        const res2 = evaluateToolCall({
+        const res2 = await evaluateToolCall({
           toolName: "edit",
           filePath,
           content: "import { db } from '../infra/db';",
@@ -334,7 +334,7 @@ describe("Joy-Zoning Sovereign Integrity (Phase 9)", () => {
       });
 
       it("should treat ': any' as a non-blocking warning even on Strike 1", async () => {
-        const res = evaluateToolCall({
+        const res = await evaluateToolCall({
           toolName: "edit",
           filePath: "src/domain/any-logic.ts",
           content: "const x: any = 1;",

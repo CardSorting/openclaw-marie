@@ -171,13 +171,17 @@ export async function runBeforeToolCallHook(args: {
     if (filePath || newPath) {
       const content =
         typeof normalizedParams.content === "string" ? normalizedParams.content : undefined;
-      const jzResult = evaluateToolCall({
+      const jzResult = await evaluateToolCall({
         toolName,
         filePath: filePath ?? undefined,
         newPath: newPath ?? undefined,
         content,
         sessionKey: args.ctx?.sessionKey,
         agentId: args.ctx?.agentId,
+        prevResultHash:
+          typeof normalizedParams.prevResultHash === "string"
+            ? normalizedParams.prevResultHash
+            : undefined,
         thought: String(
           (normalizedParams["thought"] as string) || (normalizedParams["message"] as string) || "",
         ), // Heuristic for thought capture

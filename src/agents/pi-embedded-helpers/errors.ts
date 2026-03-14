@@ -822,12 +822,28 @@ function isCliSessionExpiredErrorMessage(raw: string): boolean {
   );
 }
 
+export function isArchitecturalCorrectionError(raw: string): boolean {
+  if (!raw) {
+    return false;
+  }
+  return (
+    raw.includes("ARCHITECTURAL CORRECTION REQUIRED") ||
+    raw.includes("🛑 DOMAIN ARCHITECTURAL REJECTION") ||
+    raw.includes("🛑 HARDENED ENFORCEMENT") ||
+    raw.includes("🛑 DESTRUCTION PREVENTION") ||
+    raw.includes("🛑 LAYER EVASION")
+  );
+}
+
 export function classifyFailoverReason(raw: string): FailoverReason | null {
   if (isImageDimensionErrorMessage(raw)) {
     return null;
   }
   if (isImageSizeError(raw)) {
     return null;
+  }
+  if (isArchitecturalCorrectionError(raw)) {
+    return "architectural_correction";
   }
   if (isCliSessionExpiredErrorMessage(raw)) {
     return "session_expired";

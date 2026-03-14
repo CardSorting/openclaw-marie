@@ -1,6 +1,6 @@
 import type { OpenClawConfig } from "../config/config.js";
 
-export type DiagnosticSessionState = "idle" | "processing" | "waiting";
+export type DiagnosticSessionState = "idle" | "processing" | "waiting" | "autonomous";
 
 type DiagnosticBaseEvent = {
   ts: number;
@@ -141,7 +141,12 @@ export type DiagnosticToolLoopEvent = DiagnosticBaseEvent & {
   toolName: string;
   level: "warning" | "critical";
   action: "warn" | "block";
-  detector: "generic_repeat" | "known_poll_no_progress" | "global_circuit_breaker" | "ping_pong";
+  detector:
+    | "generic_repeat"
+    | "known_poll_no_progress"
+    | "global_circuit_breaker"
+    | "ping_pong"
+    | "architectural_deadlock";
   count: number;
   message: string;
   pairedToolName?: string;
