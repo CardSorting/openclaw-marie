@@ -171,6 +171,19 @@ export type DiagnosticStrategicMetricEvent = DiagnosticBaseEvent & {
   message?: string;
 };
 
+export type DiagnosticRemediationEvent = DiagnosticBaseEvent & {
+  type: "agent.remediation";
+  sessionKey: string;
+  filePath: string;
+  success: boolean;
+};
+
+export type DiagnosticCompactionEvent = DiagnosticBaseEvent & {
+  type: "agent.compaction";
+  sessionKey: string;
+  efficiency: number;
+};
+
 export type DiagnosticEventPayload =
   | DiagnosticUsageEvent
   | DiagnosticWebhookReceivedEvent
@@ -186,7 +199,9 @@ export type DiagnosticEventPayload =
   | DiagnosticHeartbeatEvent
   | DiagnosticToolLoopEvent
   | DiagnosticJoyZoningEvent
-  | DiagnosticStrategicMetricEvent;
+  | DiagnosticStrategicMetricEvent
+  | DiagnosticRemediationEvent
+  | DiagnosticCompactionEvent;
 
 export type DiagnosticEventInput = DiagnosticEventPayload extends infer Event
   ? Event extends DiagnosticEventPayload

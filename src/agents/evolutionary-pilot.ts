@@ -1,6 +1,18 @@
-import { onDiagnosticEvent, type DiagnosticEventPayload } from "../infra/diagnostic-events.js";
+import { promises as fs } from "node:fs";
+import {
+  onDiagnosticEvent,
+  type DiagnosticEventPayload,
+  emitDiagnosticEvent,
+} from "../infra/diagnostic-events.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { rollbackToLastSnapshot } from "./marie-memory.js";
+import { type JoyZoningLayer } from "../security/TspPolicyPlugin.js";
+import { fluidPolicyEngine } from "./FluidPolicyEngine.js";
+import { rollbackToLastSnapshot, readMemoryState } from "./marie-memory.js";
+import {
+  getStrategicEvolutionStore,
+  type StrategicEvolutionStore,
+} from "./strategic-evolution-store.js";
+import { spawnSubagentDirect } from "./subagent-spawn.js";
 
 const log = createSubsystemLogger("agents/evolutionary-pilot");
 
@@ -17,8 +29,13 @@ interface SessionPerformance {
 /**
  * Initialize the EvolutionaryPilot by subscribing to diagnostic events.
  */
-export function initEvolutionaryPilot() {
-  onDiagnosticEvent((event: DiagnosticEventPayload) => {
+export async function initEvolutionaryPilot() {
+  const store = await getStrategicEvolutionStore();
+
+  // Autonomous Maintenance Cycle
+  void store.maintenance().catch((err) => log.error(`Maintenance failed: ${err}`));
+
+  onDiagnosticEvent(async (event: DiagnosticEventPayload) => {
     if (event.type === "model.usage" && event.sessionKey) {
       void handleUsageEvent(event.sessionKey, event.durationMs ?? 0).catch(() => {});
     } else if (event.type === "message.processed" && event.sessionKey) {
@@ -27,6 +44,10 @@ export function initEvolutionaryPilot() {
       );
     } else if (event.type === "strategic.metric" && event.sessionKey) {
       void handleStrategicMetric(event.sessionKey, event.metricType, event.value).catch(() => {});
+    } else if (event.type === "agent.remediation" && event.sessionKey) {
+      void handleRemediationEvent(event.sessionKey, event.success).catch(() => {});
+    } else if (event.type === "agent.compaction" && event.sessionKey) {
+      void handleCompactionEvent(event.sessionKey, event.efficiency).catch(() => {});
     }
   });
   log.info("EvolutionaryPilot initialized and listening for performance metrics.");
@@ -42,8 +63,6 @@ export async function markMutationStart(sessionKey: string) {
   await savePerf(sessionKey, perf);
   log.info(`Mutation verification window started for session: ${sessionKey}`);
 }
-
-import { getStrategicEvolutionStore } from "./strategic-evolution-store.js";
 
 const STATE_KEY_PERF = "evolutionary_perf";
 
@@ -82,6 +101,20 @@ async function handleUsageEvent(sessionKey: string, durationMs: number) {
 }
 
 async function handleOutcomeEvent(sessionKey: string, success: number) {
+  const store = await getStrategicEvolutionStore();
+
+  // 1. Check if this was a compaction subagent
+  const isCompaction = store.getSessionState<boolean>(sessionKey, "is_compaction");
+  if (isCompaction) {
+    await handleCompactionCompletion(sessionKey, store);
+  }
+
+  // 2. Check if this was a remediation subagent
+  const isRemediation = store.getSessionState<boolean>(sessionKey, "is_remediation");
+  if (isRemediation) {
+    await handleRemediationCompletion(sessionKey, store);
+  }
+
   const perf = await getOrCreatePerf(sessionKey);
   perf.successes.push(success);
   if (perf.successes.length > 100) {
@@ -161,13 +194,190 @@ async function triggerRollback(sessionKey: string) {
   if (perf) {
     perf.mutationActive = false;
     await savePerf(sessionKey, perf);
-    // We need the agentDir to perform the rollback.
-    // For now, we'll log it. In a real integration, we'd need to map sessionKey to agentDir.
-    log.error(
-      `ROLLBACK REQ: Session ${sessionKey} requires memory rollback due to performance regression.`,
+
+    const { loadConfig } = await import("../config/config.js");
+    const { resolveAgentWorkspaceDir } = await import("./agent-scope.js");
+    const { parseAgentSessionKey } = await import("../routing/session-key.js");
+
+    const cfg = loadConfig();
+    const agentId = parseAgentSessionKey(sessionKey)?.agentId;
+
+    if (agentId) {
+      const agentDir = resolveAgentWorkspaceDir(cfg, agentId);
+      log.warn(
+        `Autonomous Rollback: Session ${sessionKey} requires memory rollback for ${agentDir}.`,
+      );
+      await rollbackToLastSnapshot(agentDir);
+    } else {
+      log.error(`ROLLBACK REQ: Could not resolve agentId from sessionKey ${sessionKey}`);
+    }
+  }
+}
+
+async function handleRemediationEvent(sessionKey: string, success: boolean) {
+  const store = await getStrategicEvolutionStore();
+  await store.recordMetric({
+    sessionKey,
+    type: "success_rate", // Using existing type for remediation success
+    value: success ? 1 : 0,
+    metadata: { activity: "remediation" },
+  });
+  log.info(`Remediation event recorded for ${sessionKey}: success=${success}`);
+}
+
+async function handleCompactionEvent(sessionKey: string, efficiency: number) {
+  const store = await getStrategicEvolutionStore();
+  await store.recordMetric({
+    sessionKey,
+    type: "discovery", // Repurposing discovery for novelty/compaction score
+    value: efficiency,
+    metadata: { activity: "compaction" },
+  });
+  log.info(`Compaction event recorded for ${sessionKey}: efficiency=${efficiency}`);
+}
+
+async function handleCompactionCompletion(sessionKey: string, store: StrategicEvolutionStore) {
+  const sourceSession = store.getSessionState<string>(sessionKey, "compaction_source_session");
+  if (!sourceSession) {
+    return;
+  }
+  const preUsage = store.getSessionState<number>(sourceSession, "compaction_pre_usage");
+
+  if (!preUsage) {
+    return;
+  }
+
+  const { loadConfig } = await import("../config/config.js");
+  const { resolveAgentWorkspaceDir } = await import("./agent-scope.js");
+  const { parseAgentSessionKey } = await import("../routing/session-key.js");
+
+  const cfg = loadConfig();
+  const agentId = parseAgentSessionKey(sourceSession)?.agentId;
+  if (!agentId) {
+    return;
+  }
+
+  const agentDir = resolveAgentWorkspaceDir(cfg, agentId);
+  const finalState = await readMemoryState(agentDir);
+  const finalUsed = finalState.memory.length + finalState.userModel.length;
+
+  const efficiency = Math.max(0, 1 - finalUsed / preUsage);
+
+  // Semantic Integrity Audit
+  const preEntities =
+    store.getSessionState<string[]>(sourceSession, "compaction_pre_entities") ?? [];
+  const postEntities = extractEntities(`${finalState.memory}\n${finalState.userModel}`);
+  const lostEntities = preEntities.filter((e) => !postEntities.includes(e));
+  const lossRatio = preEntities.length > 0 ? lostEntities.length / preEntities.length : 0;
+
+  if (lossRatio > 0.3) {
+    log.warn(
+      `Extreme Semantic Loss detected (${(lossRatio * 100).toFixed(1)}%). Triggering Autonomous Repair.`,
     );
-    // Note: In OpenClaw, the sessionKey often corresponds to a directory path or can be used to find one.
-    // If sessionKey is a path:
-    await rollbackToLastSnapshot(sessionKey);
+    await triggerAutonomousMemoryRepair(sourceSession, lostEntities);
+  }
+
+  void handleCompactionEvent(sourceSession, efficiency).catch(() => {});
+
+  emitDiagnosticEvent({
+    type: "agent.compaction",
+    sessionKey: sourceSession,
+    efficiency,
+  });
+}
+
+async function triggerAutonomousMemoryRepair(sessionKey: string, lostFacts: string[]) {
+  const task = `
+I am an autonomous memory repair subagent. During the last compaction cycle, the following critical facts/entities were lost or pruned too aggressively:
+LOST ENTITIES:
+${lostFacts.join(", ")}
+
+TASK:
+Review the current memory files and restore these missing facts in a concise, consolidated way. 
+Do not just revert; integrate them back into the existing pruned structure.
+`;
+
+  await spawnSubagentDirect(
+    {
+      task,
+      label: "Autonomous Memory Repair",
+    },
+    {
+      agentSessionKey: sessionKey,
+    },
+  );
+}
+
+export function extractEntities(text: string): string[] {
+  const COMMON_WORDS = new Set([
+    "The",
+    "And",
+    "For",
+    "This",
+    "That",
+    "With",
+    "From",
+    "Memory",
+    "User",
+    "Agent",
+  ]);
+  const matches = text.match(/\b[A-Z][a-z]{2,}\b/g) ?? [];
+  return Array.from(new Set(matches)).filter((e) => !COMMON_WORDS.has(e));
+}
+
+async function handleRemediationCompletion(sessionKey: string, store: StrategicEvolutionStore) {
+  const filePath = store.getSessionState<string>(sessionKey, "remediation_file");
+  const sourceSession = store.getSessionState<string>(sessionKey, "remediation_source_session");
+  const layer = store.getSessionState<JoyZoningLayer>(sessionKey, "remediation_layer");
+
+  if (!filePath || !sourceSession || !layer) {
+    return;
+  }
+
+  try {
+    const content = await fs.readFile(filePath, "utf8");
+    const violations = await fluidPolicyEngine.audit({
+      filePath,
+      content,
+      layer,
+      toolName: "verify",
+      sessionKey: sourceSession,
+    });
+
+    const blockViolations = violations.filter((v) => v.level === "block");
+    const success = blockViolations.length === 0;
+
+    void handleRemediationEvent(sourceSession, success).catch(() => {});
+
+    if (!success) {
+      log.warn(`Autonomous Remediation FAILED for ${filePath}. Triggering autonomous rollback.`);
+
+      // Store "Lessons Learned" for next attempt
+      const failureReason = blockViolations.map((v) => v.message).join("\n");
+      await store.setSessionState(sourceSession, `lessons:${filePath}`, failureReason);
+
+      const { loadConfig } = await import("../config/config.js");
+      const { resolveAgentWorkspaceDir } = await import("./agent-scope.js");
+      const { parseAgentSessionKey } = await import("../routing/session-key.js");
+
+      const cfg = loadConfig();
+      const agentId = parseAgentSessionKey(sourceSession)?.agentId;
+      if (agentId) {
+        const agentDir = resolveAgentWorkspaceDir(cfg, agentId);
+        await rollbackToLastSnapshot(agentDir);
+        log.info(`Rolled back ${agentDir} due to failed autonomous remediation.`);
+      }
+    }
+
+    emitDiagnosticEvent({
+      type: "agent.remediation",
+      sessionKey: sourceSession,
+      filePath,
+      success,
+    });
+  } catch (err) {
+    log.error(
+      `Failed to verify remediation for ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }

@@ -8,6 +8,7 @@ import {
 } from "./marie-memory.js";
 
 const log = createSubsystemLogger("agents/marie-memory-nudge");
+import { runAutonomousCompaction } from "./marie-memory-compactor.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -29,7 +30,26 @@ export async function trackTurn(sessionKey: string): Promise<boolean> {
   await store.setSessionState(sessionKey, STATE_KEY_TURN_COUNT, current);
 
   log.info(`Session ${sessionKey} turn count: ${current}`);
-  return current % NUDGE_INTERVAL === 0;
+  const isNudgeDue = current % NUDGE_INTERVAL === 0;
+
+  if (isNudgeDue) {
+    // Attempt autonomous compaction first to see if we can resolve context pressure
+    // without interrupting the agent/user.
+    const { resolveAgentWorkspaceDir } = await import("./agent-scope.js");
+    const { loadConfig } = await import("../config/config.js");
+    const cfg = loadConfig();
+    const { parseAgentSessionKey } = await import("../routing/session-key.js");
+    const agentId = parseAgentSessionKey(sessionKey)?.agentId;
+
+    if (agentId) {
+      const agentDir = resolveAgentWorkspaceDir(cfg, agentId);
+      void runAutonomousCompaction({ agentDir, sessionKey }).catch((err) =>
+        log.error(`Autonomous compaction failed for ${sessionKey}: ${err}`),
+      );
+    }
+  }
+
+  return isNudgeDue;
 }
 
 /**

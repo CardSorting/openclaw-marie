@@ -313,10 +313,13 @@ export async function evaluateToolCall(params: {
 
       if (violations.length > 0) {
         // Apply Progressive Enforcement & Hardening
-        const enforced = fluidPolicyEngine.resolveEnforcement({
+        const enforced = await fluidPolicyEngine.resolveEnforcement({
           strikes,
           layer: sourceLayer,
           violations,
+          filePath: normalized,
+          content,
+          sessionKey: sessionKey ?? "default",
         });
 
         const violation = resolveContentViolation({

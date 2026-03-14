@@ -173,16 +173,22 @@ export class StrategicEvolutionStore {
     return this.prepare(db, sql).all(...args) as unknown as StoredMetric[];
   }
 
-  public getStats(params: { sessionKey: string; type: MetricType }): {
+  public getStats(params: { sessionKey?: string; type: MetricType }): {
     mean: number;
     stdDev: number;
     count: number;
   } {
     const db = this.pool.acquireRead();
-    const rows = this.prepare(
-      db,
-      `SELECT value FROM sev_metrics WHERE sessionKey = ? AND type = ? ORDER BY createdAt DESC LIMIT 100`,
-    ).all(params.sessionKey, params.type) as { value: number }[];
+    let sql = `SELECT value FROM sev_metrics WHERE type = ?`;
+    const args: (string | number | null)[] = [params.type];
+
+    if (params.sessionKey) {
+      sql += ` AND sessionKey = ?`;
+      args.push(params.sessionKey);
+    }
+
+    sql += ` ORDER BY createdAt DESC LIMIT 100`;
+    const rows = this.prepare(db, sql).all(...args) as { value: number }[];
 
     if (rows.length === 0) {
       return { mean: 0, stdDev: 0, count: 0 };
@@ -231,6 +237,33 @@ export class StrategicEvolutionStore {
     } catch {
       return val as unknown as T;
     }
+  }
+
+  /**
+   * Acquires a persistent lock for a session/resource with a TTL.
+   * Returns true if lock was acquired, false if already held and not expired.
+   */
+  public async acquireLock(sessionKey: string, resource: string, ttlMs: number): Promise<boolean> {
+    const now = Date.now();
+    const lockKey = `lock:${resource}`;
+    const existing = this.getSessionState<{ expiresAt: number }>(sessionKey, lockKey);
+
+    if (existing && existing.expiresAt > now) {
+      return false;
+    }
+
+    await this.setSessionState(sessionKey, lockKey, { expiresAt: now + ttlMs });
+    return true;
+  }
+
+  /**
+   * Checks if a persistent lock is currently held and valid.
+   */
+  public isLockHeld(sessionKey: string, resource: string): boolean {
+    const now = Date.now();
+    const lockKey = `lock:${resource}`;
+    const existing = this.getSessionState<{ expiresAt: number }>(sessionKey, lockKey);
+    return !!(existing && existing.expiresAt > now);
   }
 
   public async saveBashHistory(session: PersistentBashSession): Promise<void> {
@@ -289,6 +322,22 @@ export class StrategicEvolutionStore {
     await this.pool.withWriteLock((db) => {
       this.prepare(db, `DELETE FROM sev_bash_history WHERE endedAt < ?`).run(cutoff);
     });
+  }
+
+  /**
+   * Performs autonomous maintenance on the store.
+   */
+  public async maintenance(): Promise<void> {
+    const cutoff = Date.now() - 30 * 24 * 3600 * 1000; // 30 days
+    await this.pool.withWriteLock((db) => {
+      // 1. Prune ancient metrics
+      db.prepare(`DELETE FROM sev_metrics WHERE createdAt < ?`).run(cutoff);
+      // 2. Prune session state
+      db.prepare(`DELETE FROM sev_session_state WHERE updatedAt < ?`).run(cutoff);
+      // 3. Vacuum
+      db.exec("VACUUM;");
+    });
+    log.info("Strategic Evolution store maintenance completed (Pruned & Vacuumed).");
   }
 }
 
