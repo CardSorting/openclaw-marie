@@ -562,6 +562,16 @@ export async function runOnboardingWizard(
   const { setupInternalHooks } = await import("../commands/onboard-hooks.js");
   nextConfig = await setupInternalHooks(nextConfig, runtime, prompter);
 
+  // Setup long-term memory (BroccoliDB)
+  const { configureMemoryForOnboarding } = await import("./onboarding.memory.js");
+  nextConfig = await configureMemoryForOnboarding({
+    config: nextConfig,
+    prompter,
+    runtime,
+    flow,
+    secretInputMode: opts.secretInputMode,
+  });
+
   nextConfig = onboardHelpers.applyWizardMetadata(nextConfig, { command: "onboard", mode });
   await writeConfigFile(nextConfig);
 

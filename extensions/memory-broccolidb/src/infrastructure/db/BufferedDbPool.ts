@@ -1,6 +1,6 @@
 import * as crypto from "node:crypto";
 import { Kysely, sql, CompiledQuery } from "kysely";
-import type { PluginLogger } from "openclaw/plugin-sdk";
+import type { PluginLogger } from "openclaw/plugin-sdk/memory-broccolidb";
 import { executor } from "../../core/executor.js";
 import { getDb, type Schema } from "./Config.js";
 

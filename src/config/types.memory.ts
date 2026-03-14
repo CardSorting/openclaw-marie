@@ -13,7 +13,7 @@ export type MemoryConfig = {
 
 export type BroccoliDBConfig = {
   embedding: {
-    provider: "openai";
+    provider: "openai" | "google";
     model: string;
     apiKey: string;
     baseUrl?: string;

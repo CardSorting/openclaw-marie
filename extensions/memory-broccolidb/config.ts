@@ -7,7 +7,7 @@ import {
   type MemoryCategory,
 } from "openclaw/plugin-sdk/memory-broccolidb";
 
-const DEFAULT_MODEL = "text-embedding-3-small";
+export const DEFAULT_MODEL = "gemini-embedding-2-preview";
 export const DEFAULT_CAPTURE_MAX_CHARS = 500;
 
 function resolveDefaultDbPath(): string {
@@ -28,6 +28,8 @@ const DEFAULT_DB_PATH = resolveDefaultDbPath();
 const EMBEDDING_DIMENSIONS: Record<string, number> = {
   "text-embedding-3-small": 1536,
   "text-embedding-3-large": 3072,
+  "gemini-embedding-2-preview": 768,
+  "text-embedding-004": 768,
 };
 
 function assertAllowedKeys(value: Record<string, unknown>, allowed: string[], label: string) {
@@ -81,7 +83,7 @@ export const broccolidbConfigSchema = {
 
     return {
       embedding: {
-        provider: "openai",
+        provider: (cfg.embedding as any).provider === "google" ? "google" : "openai",
         model,
         apiKey: resolveEnvVars(embedding.apiKey),
         baseUrl:
@@ -96,10 +98,10 @@ export const broccolidbConfigSchema = {
   },
   uiHints: {
     "embedding.apiKey": {
-      label: "OpenAI API Key",
+      label: "API Key",
       sensitive: true,
-      placeholder: "sk-proj-...",
-      help: "API key for OpenAI embeddings (or use ${OPENAI_API_KEY})",
+      placeholder: "sk-proj-... or AIzaSy...",
+      help: "API key for embeddings (OpenAI or Gemini)",
     },
     "embedding.baseUrl": {
       label: "Base URL",
@@ -116,7 +118,7 @@ export const broccolidbConfigSchema = {
     "embedding.model": {
       label: "Embedding Model",
       placeholder: DEFAULT_MODEL,
-      help: "OpenAI embedding model to use",
+      help: "Embedding model to use (OpenAI or Gemini)",
     },
     dbPath: {
       label: "Database Path",

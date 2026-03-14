@@ -55,6 +55,9 @@ export class BroccoliDBMemoryManager implements MemorySearchManager {
     this.workspace = new Workspace(this.connection.getPool(), "OpenClawUser", "default-workspace");
 
     this.aiService = new AiService({
+      provider: broccolidb.embedding.provider,
+      apiKey: broccolidb.embedding.apiKey,
+      baseUrl: broccolidb.embedding.baseUrl,
       model,
       outputDimensionality: dimensions ?? vectorDimsForModel(model),
     });

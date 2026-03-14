@@ -155,6 +155,12 @@ export function summarizeExistingConfig(config: OpenClawConfig): string {
   if (config.skills?.install?.nodeManager) {
     rows.push(shortenHomeInString(`skills.nodeManager: ${config.skills.install.nodeManager}`));
   }
+  if (config.memory?.backend) {
+    rows.push(`memory.backend: ${config.memory.backend}`);
+    if (config.memory.backend === "broccolidb" && config.memory.broccolidb?.dbPath) {
+      rows.push(shortenHomeInString(`memory.dbPath: ${config.memory.broccolidb.dbPath}`));
+    }
+  }
   return rows.length ? rows.join("\n") : "No key settings detected.";
 }
 
