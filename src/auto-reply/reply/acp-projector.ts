@@ -172,6 +172,9 @@ export function createAcpReplyProjector(params: {
     payload: ReplyPayload,
     meta?: AcpProjectedDeliveryMeta,
   ) => Promise<boolean>;
+  onContinuation?: (
+    continuation: Extract<AcpRuntimeEvent, { type: "done" }>["continuation"],
+  ) => void;
   provider?: string;
   accountId?: string;
 }): AcpReplyProjector {
@@ -486,6 +489,9 @@ export function createAcpReplyProjector(params: {
     }
 
     if (event.type === "done" || event.type === "error") {
+      if (event.type === "done" && event.continuation) {
+        params.onContinuation?.(event.continuation);
+      }
       await flush(true);
       resetTurnState();
     }

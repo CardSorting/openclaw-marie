@@ -57,4 +57,13 @@ export type CronConfig = {
   failureAlert?: CronFailureAlertConfig;
   /** Default destination for failure notifications across all cron jobs. */
   failureDestination?: CronFailureDestinationConfig;
+  /**
+   * Autonomy nudge controls for keeping agents awake during long-running tasks.
+   * Periodically checks idle ACP sessions and sends "continue" if they appear stalled.
+   */
+  autonomyNudge?: {
+    enabled?: boolean;
+    /** How long to wait before nudging an idle task (default: 5m). */
+    idleMinutes?: number;
+  };
 };

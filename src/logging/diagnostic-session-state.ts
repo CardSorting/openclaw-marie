@@ -1,4 +1,4 @@
-export type SessionStateValue = "idle" | "processing" | "waiting";
+export type SessionStateValue = "idle" | "processing" | "waiting" | "autonomous";
 
 export type SessionState = {
   sessionId?: string;

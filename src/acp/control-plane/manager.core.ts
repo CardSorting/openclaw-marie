@@ -1225,6 +1225,8 @@ export class AcpSessionManager {
     state: SessionAcpMeta["state"];
     lastError?: string;
     clearLastError?: boolean;
+    isAutonomous?: boolean;
+    taskContinuationToken?: string;
   }): Promise<void> {
     await this.writeSessionMeta({
       cfg: params.cfg,
@@ -1247,7 +1249,10 @@ export class AcpSessionManager {
           ...(base.cwd ? { cwd: base.cwd } : {}),
           state: params.state,
           lastActivityAt: Date.now(),
+          nudgeCount: 0,
           ...(base.lastError ? { lastError: base.lastError } : {}),
+          isAutonomous: params.isAutonomous ?? base.isAutonomous,
+          taskContinuationToken: params.taskContinuationToken ?? base.taskContinuationToken,
         };
         if (params.lastError?.trim()) {
           next.lastError = params.lastError.trim();

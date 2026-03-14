@@ -100,6 +100,20 @@ export type AcpRuntimeEvent =
   | {
       type: "done";
       stopReason?: string;
+      /**
+       * Optional hint that the agent is currently working on a multi-turn autonomous task.
+       * If provided, the gateway may use this to schedule nudges or handle continuation.
+       */
+      continuation?: {
+        isAutonomous: boolean;
+        token?: string;
+        /** Explicit timestamp (ms) for the next nudge. */
+        nextNudgeAt?: number;
+        /** Per-session override for the idle nudge interval (ms). */
+        nudgeIntervalMs?: number;
+        /** Cron expression for periodic nudges. */
+        nudgeSchedule?: string;
+      };
     }
   | {
       type: "error";

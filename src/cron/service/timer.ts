@@ -2,6 +2,7 @@ import type { CronConfig, CronRetryOn } from "../../config/types.cron.js";
 import { isCronSystemEvent } from "../../infra/heartbeat-events-filter.js";
 import type { HeartbeatRunResult } from "../../infra/heartbeat-wake.js";
 import { DEFAULT_AGENT_ID } from "../../routing/session-key.js";
+import { sweepAutonomyNudges } from "../autonomy-nudge.js";
 import { resolveCronDeliveryPlan } from "../delivery.js";
 import { shouldEnqueueCronMainSummary } from "../heartbeat-policy.js";
 import { sweepCronRunSessions } from "../session-reaper.js";
@@ -703,6 +704,15 @@ export async function onTimer(state: CronServiceState) {
           });
         } catch (err) {
           state.deps.log.warn({ err: String(err), storePath }, "cron: session reaper sweep failed");
+        }
+
+        try {
+          await sweepAutonomyNudges({
+            state,
+            sessionStorePath: storePath,
+          });
+        } catch (err) {
+          state.deps.log.warn({ err: String(err), storePath }, "cron: autonomy nudge sweep failed");
         }
       }
     }

@@ -484,6 +484,13 @@ export const OpenClawSchema = z
           })
           .strict()
           .optional(),
+        autonomyNudge: z
+          .object({
+            enabled: z.boolean().optional(),
+            idleMinutes: z.number().int().min(1).optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .superRefine((val, ctx) => {

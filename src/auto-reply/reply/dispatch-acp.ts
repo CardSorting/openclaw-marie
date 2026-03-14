@@ -7,7 +7,8 @@ import {
   isSessionIdentityPending,
   resolveSessionIdentityFromMeta,
 } from "../../acp/runtime/session-identity.js";
-import { readAcpSessionEntry } from "../../acp/runtime/session-meta.js";
+import { readAcpSessionEntry, upsertAcpSessionMeta } from "../../acp/runtime/session-meta.js";
+import type { AcpRuntimeEvent } from "../../acp/runtime/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { TtsAutoMode } from "../../config/types.tts.js";
 import { logVerbose } from "../../globals.js";
@@ -217,10 +218,15 @@ export async function tryDispatchAcpReply(params: {
           resolveAgentIdFromSessionKey(sessionKey)
         ).trim()
       : resolveAgentIdFromSessionKey(sessionKey);
+
+  let continuation: Extract<AcpRuntimeEvent, { type: "done" }>["continuation"] | undefined;
   const projector = createAcpReplyProjector({
     cfg: params.cfg,
     shouldSendToolSummaries: params.shouldSendToolSummaries,
     deliver: delivery.deliver,
+    onContinuation: (c) => {
+      continuation = c;
+    },
     provider: params.ctx.Surface ?? params.ctx.Provider,
     accountId: params.ctx.AccountId,
   });
@@ -257,6 +263,31 @@ export async function tryDispatchAcpReply(params: {
     });
 
     await projector.flush(true);
+
+    // Update autonomy state if signaled by agent
+    if (continuation) {
+      await upsertAcpSessionMeta({
+        sessionKey,
+        cfg: params.cfg,
+        mutate: (current) => {
+          if (!current) {
+            return current;
+          }
+          return {
+            ...current,
+            isAutonomous: continuation?.isAutonomous,
+            taskContinuationToken: continuation?.token,
+            nextNudgeAt: continuation?.nextNudgeAt,
+            nudgeSchedule: continuation?.nudgeSchedule,
+            runtimeOptions: {
+              ...current.runtimeOptions,
+              nudgeIntervalMs: continuation?.nudgeIntervalMs,
+            },
+          };
+        },
+      });
+    }
+
     const ttsMode = resolveTtsConfig(params.cfg).mode ?? "final";
     const accumulatedBlockText = delivery.getAccumulatedBlockText();
     if (ttsMode === "final" && delivery.getBlockCount() > 0 && accumulatedBlockText.trim()) {

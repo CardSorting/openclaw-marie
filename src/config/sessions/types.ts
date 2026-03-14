@@ -47,6 +47,32 @@ export type SessionAcpMeta = {
   state: "idle" | "running" | "error";
   lastActivityAt: number;
   lastError?: string;
+  /**
+   * Whether this session is currently performing an autonomous task.
+   * Autonomous tasks are nudged more aggressively to ensure progress.
+   */
+  isAutonomous?: boolean;
+  /**
+   * Optional token or state hint provided by the agent to resume its task.
+   */
+  taskContinuationToken?: string;
+  /**
+   * Number of consecutive nudges sent since the last activity.
+   */
+  nudgeCount?: number;
+  /**
+   * Timestamp (ms) of the last nudge sent.
+   */
+  lastNudgeAt?: number;
+  /**
+   * Explicit timestamp (ms) when the next nudge should occur.
+   * If provided, overrides the default idle timeout.
+   */
+  nextNudgeAt?: number;
+  /**
+   * Cron expression for periodic nudges.
+   */
+  nudgeSchedule?: string;
 };
 
 export type AcpSessionRuntimeOptions = {
@@ -62,6 +88,10 @@ export type AcpSessionRuntimeOptions = {
   permissionProfile?: string;
   /** ACP runtime config option: per-turn timeout in seconds. */
   timeoutSeconds?: number;
+  /**
+   * Override for the idle nudge interval (ms).
+   */
+  nudgeIntervalMs?: number;
   /** Backend-specific option bag mapped through session/set_config_option. */
   backendExtras?: Record<string, string>;
 };
