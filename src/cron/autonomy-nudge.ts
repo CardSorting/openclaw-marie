@@ -51,6 +51,8 @@ export async function sweepAutonomyNudges(params: {
 
   const globalIdleMinutes = config?.idleMinutes ?? 5;
   const globalIdleThresholdMs = globalIdleMinutes * 60_000;
+  const maxNudges = config?.maxNudges ?? 5;
+  const backoffEnabled = config?.backoff ?? false;
 
   try {
     const store = loadSessionStore(sessionStorePath);
@@ -61,17 +63,23 @@ export async function sweepAutonomyNudges(params: {
 
       const acp = entry.acp;
       const lastActivity = acp.lastActivityAt || entry.updatedAt || 0;
+      const currentNudgeCount = acp.nudgeCount ?? 0;
 
-      // Priority 1: Explicitly scheduled next nudge
-      // Priority 2: Periodic cron schedule
-      // Priority 3: Session-specific nudge interval
-      // Priority 4: Global nudge interval
       let shouldNudge = false;
-      if (acp.nextNudgeAt && acp.nextNudgeAt > 0) {
+      let shouldSuspend = false;
+
+      // Priority 1: Max nudges reached -> Suspend task
+      if (currentNudgeCount >= maxNudges) {
+        shouldSuspend = true;
+      }
+      // Priority 2: Explicitly scheduled next nudge
+      else if (acp.nextNudgeAt && acp.nextNudgeAt > 0) {
         if (now >= acp.nextNudgeAt) {
           shouldNudge = true;
         }
-      } else if (acp.nudgeSchedule) {
+      }
+      // Priority 3: Periodic cron schedule
+      else if (acp.nudgeSchedule) {
         try {
           const cron = new Cron(acp.nudgeSchedule, { timezone: "UTC" });
           const lastNudge = acp.lastNudgeAt || lastActivity;
@@ -85,17 +93,23 @@ export async function sweepAutonomyNudges(params: {
             "cron: invalid nudgeSchedule",
           );
         }
-      } else {
+      }
+      // Priority 4: Session-specific or global nudge interval with optional backoff
+      else {
         const sessionIntervalMs = acp.runtimeOptions?.nudgeIntervalMs;
-        const thresholdMs =
+        let thresholdMs =
           sessionIntervalMs && sessionIntervalMs > 0 ? sessionIntervalMs : globalIdleThresholdMs;
+
+        if (backoffEnabled) {
+          thresholdMs = thresholdMs * Math.pow(2, currentNudgeCount);
+        }
 
         if (now - lastActivity >= thresholdMs) {
           shouldNudge = true;
         }
       }
 
-      if (!shouldNudge) {
+      if (!shouldNudge && !shouldSuspend) {
         continue;
       }
 
@@ -115,7 +129,31 @@ export async function sweepAutonomyNudges(params: {
         continue;
       }
 
-      const nudgeCount = (acp.nudgeCount ?? 0) + 1;
+      if (shouldSuspend) {
+        state.deps.log.warn(
+          { sessionKey, nudgeCount: currentNudgeCount },
+          "cron: suspending stalled autonomy task",
+        );
+        state.deps.enqueueSystemEvent(
+          "Task suspended: Max nudges reached without agent activity.",
+          { sessionKey, contextKey: "cron:autonomy-nudge" },
+        );
+        await updateSessionStore(sessionStorePath, (innerStore) => {
+          const target = innerStore[sessionKey];
+          if (target?.acp) {
+            target.acp.isAutonomous = false;
+            target.acp.nudgeCount = 0;
+            target.acp.state = "error";
+            target.acp.lastError = "Task suspended after exceeding maximum idle nudges.";
+            delete target.acp.nextNudgeAt;
+            delete target.acp.nudgeSchedule;
+            delete target.acp.taskContinuationToken;
+          }
+        });
+        continue;
+      }
+
+      const nudgeCount = currentNudgeCount + 1;
       const nudgeText = resolveNudgeText({
         nudgeCount,
         token: acp.taskContinuationToken,

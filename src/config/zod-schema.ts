@@ -488,6 +488,8 @@ export const OpenClawSchema = z
           .object({
             enabled: z.boolean().optional(),
             idleMinutes: z.number().int().min(1).optional(),
+            maxNudges: z.number().int().min(1).optional(),
+            backoff: z.boolean().optional(),
           })
           .strict()
           .optional(),

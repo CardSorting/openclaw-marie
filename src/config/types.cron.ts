@@ -65,5 +65,9 @@ export type CronConfig = {
     enabled?: boolean;
     /** How long to wait before nudging an idle task (default: 5m). */
     idleMinutes?: number;
+    /** Max number of consecutive nudges before suspending the autonomous task (default: 5). */
+    maxNudges?: number;
+    /** If true, apply exponential backoff between subsequent nudges (default: false). */
+    backoff?: boolean;
   };
 };

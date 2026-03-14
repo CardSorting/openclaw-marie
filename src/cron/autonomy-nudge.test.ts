@@ -281,4 +281,72 @@ describe("sweepAutonomyNudges", () => {
     const updated = JSON.parse(fs.readFileSync(storePath, "utf-8"));
     expect(updated["agent:main:acp:task1"].acp.lastActivityAt).toBe(now);
   });
+
+  it("suspends task after maxNudges reached", async () => {
+    const now = Date.now();
+    const store = {
+      "agent:main:acp:s1": {
+        sessionId: "s1",
+        updatedAt: now - 6 * 60_000,
+        acp: {
+          state: "idle",
+          isAutonomous: true,
+          nudgeCount: 5,
+        },
+      },
+    };
+    fs.writeFileSync(storePath, JSON.stringify(store));
+
+    const state = createTestState(now, { autonomyNudge: { enabled: true, maxNudges: 5 } });
+    await sweepAutonomyNudges({ state, sessionStorePath: storePath });
+
+    expect(state.deps.enqueueSystemEvent).toHaveBeenCalledWith(
+      "Task suspended: Max nudges reached without agent activity.",
+      expect.objectContaining({ sessionKey: "agent:main:acp:s1" }),
+    );
+
+    const updated = JSON.parse(fs.readFileSync(storePath, "utf-8"));
+    const acp = updated["agent:main:acp:s1"].acp;
+    expect(acp.state).toBe("error");
+    expect(acp.isAutonomous).toBe(false);
+    expect(acp.nudgeCount).toBe(0);
+    expect(acp.lastError).toContain("Task suspended");
+  });
+
+  it("applies exponential backoff to nudge interval when enabled", async () => {
+    const now = Date.now();
+    // Base threshold = 5m
+    // nudgeCount = 2 -> threshold = 5m * (2^2) = 20m
+    const store = {
+      "agent:main:acp:s1": {
+        sessionId: "s1",
+        updatedAt: now - 15 * 60_000, // 15m ago (not enough, need 20m)
+        acp: {
+          state: "idle",
+          isAutonomous: true,
+          nudgeCount: 2,
+          lastActivityAt: now - 15 * 60_000,
+        },
+      },
+    };
+    fs.writeFileSync(storePath, JSON.stringify(store));
+
+    const state = createTestState(now, {
+      autonomyNudge: { enabled: true, idleMinutes: 5, backoff: true },
+    });
+    await sweepAutonomyNudges({ state, sessionStorePath: storePath });
+    expect(state.deps.enqueueSystemEvent).not.toHaveBeenCalled();
+
+    resetAutonomyNudgeThrottle();
+
+    // Now set lastActivityAt to 21m ago, should trigger
+    store["agent:main:acp:s1"].acp.lastActivityAt = now - 21 * 60_000;
+    fs.writeFileSync(storePath, JSON.stringify(store));
+
+    const state2 = createTestState(now, {
+      autonomyNudge: { enabled: true, idleMinutes: 5, backoff: true },
+    });
+    await sweepAutonomyNudges({ state: state2, sessionStorePath: storePath });
+    expect(state2.deps.enqueueSystemEvent).toHaveBeenCalled();
+  });
 });
