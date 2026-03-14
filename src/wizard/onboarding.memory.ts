@@ -78,75 +78,111 @@ export async function configureMemoryForOnboarding(params: {
 
   let apiKeyText = "";
   let baseUrl: string | undefined = undefined;
+  let useVertex = false;
+  let projectId: string | undefined = undefined;
+  let location: string | undefined = undefined;
+
+  if (provider === "google") {
+    useVertex = guardCancel(
+      await prompter.confirm({
+        message: "Use Google Cloud Vertex AI? (Standard is Google AI Studio)",
+        initialValue: config.memory?.broccolidb?.embedding.vertexai ?? false,
+      }),
+      runtime,
+    );
+
+    if (useVertex) {
+      projectId = guardCancel(
+        await prompter.text({
+          message: "Vertex Project ID",
+          placeholder: "my-gcp-project",
+          initialValue:
+            config.memory?.broccolidb?.embedding.projectId ?? process.env.GOOGLE_CLOUD_PROJECT,
+        }),
+        runtime,
+      );
+      location = guardCancel(
+        await prompter.text({
+          message: "Vertex Location",
+          placeholder: "us-central1",
+          initialValue: config.memory?.broccolidb?.embedding.location ?? "us-central1",
+        }),
+        runtime,
+      );
+    }
+  }
+
   const envVar = provider === "google" ? "GEMINI_API_KEY" : "OPENAI_API_KEY";
 
-  // 1. Check process.env
-  const existingEnv =
-    process.env[envVar] || (provider === "google" ? process.env.GOOGLE_API_KEY : undefined);
+  // 1. Check process.env (only if not using Vertex AI)
+  if (!useVertex) {
+    const existingEnv =
+      process.env[envVar] || (provider === "google" ? process.env.GOOGLE_API_KEY : undefined);
 
-  // 2. Check existing config for agent
-  const existingConfigKey = config.models?.providers?.[provider]?.apiKey;
+    // 2. Check existing config for agent
+    const existingConfigKey = config.models?.providers?.[provider]?.apiKey;
 
-  if (existingEnv) {
-    const reuse = guardCancel(
-      await prompter.confirm({
-        message: `Use ${envVar} from environment?`,
-        initialValue: true,
-      }),
-      runtime,
-    );
-    if (reuse) {
-      apiKeyText = `\${${envVar}}`;
+    if (existingEnv) {
+      const reuse = guardCancel(
+        await prompter.confirm({
+          message: `Use ${envVar} from environment?`,
+          initialValue: true,
+        }),
+        runtime,
+      );
+      if (reuse) {
+        apiKeyText = `\${${envVar}}`;
+      }
+    } else if (existingConfigKey) {
+      const reuse = guardCancel(
+        await prompter.confirm({
+          message: `Reuse ${provider} API key from agent configuration?`,
+          initialValue: true,
+        }),
+        runtime,
+      );
+      if (reuse) {
+        if (typeof existingConfigKey === "string") {
+          apiKeyText = existingConfigKey;
+        } else if (existingConfigKey.source === "env") {
+          apiKeyText = `\${${existingConfigKey.id}}`;
+        }
+      }
     }
-  } else if (existingConfigKey) {
-    const reuse = guardCancel(
-      await prompter.confirm({
-        message: `Reuse ${provider} API key from agent configuration?`,
-        initialValue: true,
-      }),
-      runtime,
-    );
-    if (reuse) {
-      if (typeof existingConfigKey === "string") {
-        apiKeyText = existingConfigKey;
-      } else if (existingConfigKey.source === "env") {
-        apiKeyText = `\${${existingConfigKey.id}}`;
+
+    if (!apiKeyText) {
+      const selectedMode = await resolveSecretInputModeForEnvSelection({
+        prompter,
+        explicitMode: secretInputMode,
+        copy: {
+          plaintextHint: "Save key directly in config (Easiest)",
+          refHint: "Reference an environment variable (Advanced)",
+        },
+      });
+
+      if (selectedMode === "ref") {
+        const resolved = await promptSecretRefForOnboarding({
+          provider,
+          config,
+          prompter,
+          preferredEnvVar: envVar,
+        });
+        apiKeyText = `\${${resolved.ref.id}}`;
+      } else {
+        const key = guardCancel(
+          await prompter.text({
+            message: `${provider === "google" ? "Gemini" : "OpenAI"} API key`,
+            placeholder: provider === "google" ? "AIzaSy..." : "sk-proj-...",
+            validate: validateApiKeyInput,
+          }),
+          runtime,
+        );
+        apiKeyText = normalizeApiKeyInput(key);
       }
     }
   }
 
-  if (!apiKeyText) {
-    const selectedMode = await resolveSecretInputModeForEnvSelection({
-      prompter,
-      explicitMode: secretInputMode,
-      copy: {
-        plaintextHint: "Save key directly in config (Easiest)",
-        refHint: "Reference an environment variable (Advanced)",
-      },
-    });
-
-    if (selectedMode === "ref") {
-      const resolved = await promptSecretRefForOnboarding({
-        provider,
-        config,
-        prompter,
-        preferredEnvVar: envVar,
-      });
-      apiKeyText = `\${${resolved.ref.id}}`;
-    } else {
-      const key = guardCancel(
-        await prompter.text({
-          message: `${provider === "google" ? "Gemini" : "OpenAI"} API key`,
-          placeholder: provider === "google" ? "AIzaSy..." : "sk-proj-...",
-          validate: validateApiKeyInput,
-        }),
-        runtime,
-      );
-      apiKeyText = normalizeApiKeyInput(key);
-    }
-  }
-
-  if (!apiKeyText) {
+  if (!apiKeyText && !useVertex) {
     await prompter.note(
       "No API key provided for embeddings. BroccoliDB will continue to function but will use keyword-based search only (reduced intelligence).",
       "Memory Fallback",
@@ -178,6 +214,9 @@ export async function configureMemoryForOnboarding(params: {
       apiKey: apiKeyText,
       dimensions,
       baseUrl,
+      vertexai: useVertex,
+      projectId,
+      location,
     },
     autoRecall: true,
     autoCapture: true,

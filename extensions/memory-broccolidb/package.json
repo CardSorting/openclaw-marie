@@ -9,7 +9,7 @@
     "check": "oxlint --type-aware"
   },
   "dependencies": {
-    "@google/genai": "^1.44.0",
+    "@google/genai": "^1.45.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@sinclair/typebox": "0.34.48",
     "better-sqlite3": "^11.3.0",

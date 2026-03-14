@@ -18,6 +18,12 @@ export type BroccoliDBConfig = {
     apiKey: string;
     baseUrl?: string;
     dimensions?: number;
+    /** Whether to use Vertex AI instead of the Gemini API. */
+    vertexai?: boolean;
+    /** Vertex AI project ID. */
+    projectId?: string;
+    /** Vertex AI location. */
+    location?: string;
   };
   dbPath?: string;
   autoCapture?: boolean;

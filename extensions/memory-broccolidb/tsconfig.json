@@ -9,6 +9,6 @@
       "openclaw/plugin-sdk/account-id": ["../../src/plugin-sdk/account-id.ts"]
     }
   },
-  "include": ["**/*"],
+  "include": ["**/*", "../../src/types/**/*"],
   "exclude": ["node_modules", "dist", "src/verify_filetree.ts"]
 }

@@ -73,7 +73,7 @@ export const broccolidbConfigSchema = {
     const embedding = cfg.embedding as Record<string, unknown> | undefined;
     assertAllowedKeys(
       embedding || {},
-      ["apiKey", "model", "baseUrl", "dimensions"],
+      ["apiKey", "model", "baseUrl", "dimensions", "vertexai", "projectId", "location"],
       "embedding config",
     );
 
@@ -90,6 +90,13 @@ export const broccolidbConfigSchema = {
         baseUrl:
           typeof embedding?.baseUrl === "string" ? resolveEnvVars(embedding.baseUrl) : undefined,
         dimensions: typeof embedding?.dimensions === "number" ? embedding.dimensions : undefined,
+        vertexai: embedding?.vertexai === true,
+        projectId:
+          typeof embedding?.projectId === "string"
+            ? resolveEnvVars(embedding.projectId)
+            : undefined,
+        location:
+          typeof embedding?.location === "string" ? resolveEnvVars(embedding.location) : undefined,
       },
       dbPath: typeof cfg.dbPath === "string" ? cfg.dbPath : DEFAULT_DB_PATH,
       autoCapture: cfg.autoCapture === true,
@@ -103,6 +110,23 @@ export const broccolidbConfigSchema = {
       sensitive: true,
       placeholder: "sk-proj-... or AIzaSy...",
       help: "API key for embeddings (OpenAI or Gemini)",
+    },
+    "embedding.vertexai": {
+      label: "Use Vertex AI",
+      help: "Use Google Cloud Vertex AI instead of Google AI Studio",
+      advanced: true,
+    },
+    "embedding.projectId": {
+      label: "Vertex Project ID",
+      placeholder: "my-gcp-project",
+      help: "Google Cloud Project ID for Vertex AI",
+      advanced: true,
+    },
+    "embedding.location": {
+      label: "Vertex Location",
+      placeholder: "us-central1",
+      help: "Google Cloud location for Vertex AI",
+      advanced: true,
     },
     "embedding.baseUrl": {
       label: "Base URL",
